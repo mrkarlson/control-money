@@ -41,27 +41,35 @@ export default function Expenses() {
       <div className="mb-8">
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-semibold text-gray-800">Gastos</h1>
+            <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Gastos</h1>
             <button
               onClick={() => {
               setSelectedExpense(null);
               setIsExpenseFormOpen(true);
             }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg hover:from-emerald-600 hover:to-emerald-700 active:from-emerald-700 active:to-emerald-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-medium"
             >
               Añadir Gasto
             </button>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex space-x-3">
             <button
               onClick={() => setViewMode('monthly')}
-              className={`px-4 py-2 rounded-lg transition-colors ${viewMode === 'monthly' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                viewMode === 'monthly' 
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:from-blue-600 hover:to-blue-700 transform hover:-translate-y-0.5' 
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:border-gray-500'
+              }`}
             >
               Vista Mensual
             </button>
             <button
               onClick={() => setViewMode('annual')}
-              className={`px-4 py-2 rounded-lg transition-colors ${viewMode === 'annual' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 ${
+                viewMode === 'annual' 
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:from-blue-600 hover:to-blue-700 transform hover:-translate-y-0.5' 
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 dark:hover:border-gray-500'
+              }`}
             >
               Vista Anual
             </button>

@@ -7,7 +7,7 @@ export default function Savings() {
       <div className="mb-8">
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-semibold text-gray-800">Ahorros</h1>
+            <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Ahorros</h1>
           </div>
         </div>
       </div>

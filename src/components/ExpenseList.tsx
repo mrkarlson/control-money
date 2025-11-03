@@ -350,24 +350,29 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
         <Table size="small" sx={{ 
           '& .MuiTableCell-root': { 
             padding: '12px',
-            border: '1px solid rgba(224, 224, 224, 0.3)',
+            border: (theme) => `1px solid ${theme.palette.divider}`,
             boxShadow: '0px 1px 2px rgba(0,0,0,0.05)',
             transition: 'all 0.2s ease'
           },
           '& .MuiTableHead-root': {
             '& .MuiTableCell-root': {
-              backgroundColor: 'rgba(245, 245, 245, 0.95)',
+              backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                ? 'rgba(55, 65, 81, 0.95)' 
+                : 'rgba(245, 245, 245, 0.95)',
               fontWeight: '600',
-              borderBottom: '2px solid rgba(224, 224, 224, 0.6)',
+              borderBottom: (theme) => `2px solid ${theme.palette.divider}`,
               backdropFilter: 'blur(4px)',
               position: 'sticky',
               top: 0,
-              zIndex: 1
+              zIndex: 1,
+              color: (theme) => theme.palette.text.primary
             }
           },
           '& .MuiTableRow-root:hover': {
             '& .MuiTableCell-root': {
-              backgroundColor: 'rgba(245, 245, 245, 0.6)'
+              backgroundColor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(75, 85, 99, 0.6)'
+                : 'rgba(245, 245, 245, 0.6)'
             }
           }
         }}>
@@ -377,7 +382,11 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
                 sx={{ 
                   fontWeight: 600,
                   cursor: 'pointer',
-                  '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                  '&:hover': { 
+                    backgroundColor: (theme) => theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.04)'
+                  },
                   '&::after': {
                     content: '""',
                     display: 'inline-block',
@@ -410,7 +419,11 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
                 })}
                 sx={{ 
                   cursor: 'pointer',
-                  '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                  '&:hover': { 
+                    backgroundColor: (theme) => theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.04)'
+                  },
                   '&::after': {
                     content: '""',
                     display: 'inline-block',
@@ -438,7 +451,11 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
                 })}
                 sx={{ 
                   cursor: 'pointer',
-                  '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                  '&:hover': { 
+                    backgroundColor: (theme) => theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.04)'
+                  },
                   '&::after': {
                     content: '""',
                     display: 'inline-block',

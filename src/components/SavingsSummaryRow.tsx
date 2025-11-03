@@ -1,4 +1,4 @@
-import { TableRow, TableCell, Typography } from '@mui/material';
+import { TableRow, TableCell, Typography, useTheme } from '@mui/material';
 import { SavingsGoal } from '../db/config';
 import { formatCurrency, formatPercentage } from '../utils/formatters';
 
@@ -7,6 +7,8 @@ interface SavingsSummaryRowProps {
 }
 
 export default function SavingsSummaryRow({ goals }: SavingsSummaryRowProps) {
+  const theme = useTheme();
+  
   if (goals.length === 0) {
     return null;
   }
@@ -17,7 +19,14 @@ export default function SavingsSummaryRow({ goals }: SavingsSummaryRowProps) {
   const totalProgress = totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
 
   return (
-    <TableRow sx={{ bgcolor: 'grey.50', fontWeight: 'bold' }}>
+    <TableRow sx={{ 
+      bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50',
+      fontWeight: 'bold',
+      '& .MuiTableCell-root': {
+        color: theme.palette.text.primary,
+        borderBottom: `1px solid ${theme.palette.divider}`
+      }
+    }}>
       <TableCell sx={{ fontWeight: 'bold' }}>TOTALES</TableCell>
       <TableCell>-</TableCell>
       <TableCell align="right" sx={{ fontWeight: 'bold' }}>
