@@ -16,6 +16,7 @@ export default function SavingsSummaryRow({ goals }: SavingsSummaryRowProps) {
   const totalTarget = goals.reduce((sum, goal) => sum + goal.targetAmount, 0);
   const totalCurrent = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
   const totalMonthly = goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0);
+  const totalRemaining = goals.reduce((sum, goal) => sum + Math.max(goal.targetAmount - goal.currentAmount, 0), 0);
   const totalProgress = totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
 
   return (
@@ -37,6 +38,9 @@ export default function SavingsSummaryRow({ goals }: SavingsSummaryRowProps) {
       </TableCell>
       <TableCell align="right" sx={{ fontWeight: 'bold' }}>
         {formatCurrency(totalMonthly)}
+      </TableCell>
+      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+        {formatCurrency(totalRemaining)}
       </TableCell>
       <TableCell sx={{ fontWeight: 'bold' }}>
         <Typography variant="body2" sx={{ fontWeight: 'bold' }}>

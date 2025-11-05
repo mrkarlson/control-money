@@ -1,6 +1,6 @@
-import { getDB, GoogleSheetsConfig, Expense, Balance } from './config';
+import { GoogleSheetsConfig, Expense } from './config';
 import { getGoogleSheetsConfig, saveGoogleSheetsConfig, refreshAccessToken } from './googleSheetsService';
-import { getAllExpenses, getCurrentBalance, updateBalance, getExpensesByMonth } from './services';
+import { getCurrentBalance, updateBalance, getExpensesByMonth } from './repositoryAdapter';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -129,38 +129,14 @@ async function getAppData(): Promise<SyncData> {
     // Obtener gastos del mes usando la función que maneja correctamente los gastos recurrentes
     const monthExpenses: Expense[] = await getExpensesByMonth(targetMonth);
     
-    // Calcular totales para el mes considerando el historial de pagos
+    // Calcular totales para el mes usando los valores ya transformados por getExpensesByMonth
     const totalPaid = monthExpenses
-      .filter(expense => {
-        if (expense.frequency === 'one-time') return expense.isPaid;
-        // Para gastos recurrentes, verificar el historial de pagos
-        const paymentRecord = expense.paymentHistory?.find((record: any) => {
-          const recordDate = new Date(record.date);
-          return recordDate.getMonth() === targetMonth.getMonth() && 
-                 recordDate.getFullYear() === targetMonth.getFullYear();
-        });
-        return paymentRecord?.isPaid || false;
-      })
-      .reduce((sum, expense) => {
-        const amount = expense.amount;
-        return sum + amount;
-      }, 0);
-    
+      .filter(expense => expense.isPaid)
+      .reduce((sum, expense) => sum + expense.amount, 0);
+
     const totalPending = monthExpenses
-      .filter(expense => {
-        if (expense.frequency === 'one-time') return !expense.isPaid;
-        // Para gastos recurrentes, verificar el historial de pagos
-        const paymentRecord = expense.paymentHistory?.find((record: any) => {
-          const recordDate = new Date(record.date);
-          return recordDate.getMonth() === targetMonth.getMonth() && 
-                 recordDate.getFullYear() === targetMonth.getFullYear();
-        });
-        return !paymentRecord?.isPaid;
-      })
-      .reduce((sum, expense) => {
-        const amount = expense.amount;
-        return sum + amount;
-      }, 0);
+      .filter(expense => !expense.isPaid)
+      .reduce((sum, expense) => sum + expense.amount, 0);
     
     // Usar el balance actual para cada mes
     const monthBalance = {
@@ -352,12 +328,14 @@ async function updateLocalData(data: SyncData): Promise<void> {
       const currentBalance = await getCurrentBalance();
       
       if (currentBalance) {
+        // updateBalance espera Omit<Balance, 'id'>; excluimos 'id' explícitamente
+        const { id: _id, ...rest } = currentBalance;
         await updateBalance({
-          ...currentBalance,
+          ...rest,
           amount: currentMonthData.balance.amount,
           monthlyIncome: currentMonthData.balance.monthlyIncome,
           date: new Date()
-        } as Balance);
+        });
       }
     } else {
       console.log('No se encontraron datos del mes actual para actualizar el balance');

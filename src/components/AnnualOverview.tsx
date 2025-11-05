@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Chip,
@@ -14,7 +14,8 @@ import {
 import { format, startOfYear, eachMonthOfInterval, endOfYear, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
-import { getExpensesByMonth, getCurrentBalance } from '../db/services';
+// Usar adaptador de repositorio para respetar la BD activa
+import { getExpensesByMonth, getCurrentBalance } from '../db';
 
 interface MonthlyExpenses {
   [key: string]: {
@@ -26,7 +27,7 @@ interface MonthlyExpenses {
 }
 
 export default function AnnualOverview() {
-  const [currentYear, setCurrentYear] = useState(new Date());
+  const [currentYear] = useState(new Date());
   const [monthlyExpenses, setMonthlyExpenses] = useState<MonthlyExpenses>({});
   const [categories, setCategories] = useState<string[]>([]);
   const [balance, setBalance] = useState<{ amount: number; monthlyIncome: number } | null>(null);
@@ -37,21 +38,8 @@ export default function AnnualOverview() {
     end: endOfYear(currentYear)
   });
 
-  useEffect(() => {
-    // Inicializar todos los meses como seleccionados
-    setSelectedMonths(months.map(month => format(month, 'yyyy-MM')));
-  }, [currentYear]);
-
-  useEffect(() => {
-    const loadData = async () => {
-      await loadExpenses();
-      const currentBalance = await getCurrentBalance();
-      setBalance(currentBalance);
-    };
-    loadData();
-  }, [currentYear]);
-
-  const loadExpenses = async () => {
+  // Definir loadExpenses antes de los useEffect para evitar ReferenceError en arrays de dependencias
+  const loadExpenses = useCallback(async () => {
     try {
       const monthlyData: MonthlyExpenses = {};
       const allCategories = new Set<string>();
@@ -101,7 +89,34 @@ export default function AnnualOverview() {
     } catch (error) {
       console.error('Error loading expenses:', error);
     }
-  };
+  }, [months]);
+
+  useEffect(() => {
+    // Inicializar todos los meses como seleccionados
+    setSelectedMonths(months.map(month => format(month, 'yyyy-MM')));
+  }, [currentYear]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      await loadExpenses();
+      const currentBalance = await getCurrentBalance();
+      setBalance(currentBalance);
+    };
+    loadData();
+  }, [currentYear]);
+
+  // Escuchar cambios de BD para recargar datos
+  useEffect(() => {
+    const handler = async () => {
+      await loadExpenses();
+      const currentBalance = await getCurrentBalance();
+      setBalance(currentBalance);
+    };
+    window.addEventListener('dbTypeChanged', handler as any);
+    return () => window.removeEventListener('dbTypeChanged', handler as any);
+  }, [loadExpenses]);
+
+  
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-ES', {
@@ -121,7 +136,8 @@ export default function AnnualOverview() {
   const calculateFilteredTotal = (category?: string) => {
     return selectedMonths.reduce((acc, monthKey) => {
       if (category) {
-        return acc + (monthlyExpenses[monthKey]?.byCategory[category] || 0);
+        // Asegurar acceso seguro cuando monthlyExpenses aún no está cargado
+        return acc + (monthlyExpenses[monthKey]?.byCategory?.[category] || 0);
       } else {
         return acc + Object.values(monthlyExpenses[monthKey]?.byCategory || {}).reduce((sum, amount) => sum + amount, 0);
       }
@@ -195,7 +211,10 @@ export default function AnnualOverview() {
                 </TableCell>
                 {months.map(month => {
                   const monthKey = format(month, 'yyyy-MM');
-                  const amount = selectedMonths.includes(monthKey) ? (monthlyExpenses[monthKey]?.byCategory[category] || 0) : 0;
+                  // Encadenamiento opcional seguro para evitar errores cuando monthlyExpenses aún no está cargado
+                  const amount = selectedMonths.includes(monthKey)
+                    ? (monthlyExpenses[monthKey]?.byCategory?.[category] || 0)
+                    : 0;
                   return (
                     <TableCell 
                       key={month.toString()} 

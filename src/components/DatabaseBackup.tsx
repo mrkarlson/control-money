@@ -6,11 +6,12 @@ import {
   Typography,
   Alert,
   CircularProgress,
-  Stack,
   Tooltip,
 } from '@mui/material';
-import { getDB, resetDatabase, deleteDatabase } from '../db/config';
-import { exportDatabase, importDatabase, clearStore } from '../db/services';
+import { resetDatabase, deleteDatabase } from '../db/config';
+import { exportDatabase, importDatabase, clearStore } from '../db';
+import { DatabaseConfig } from './DatabaseConfig';
+import { DatabaseType } from '../db/repositories/interfaces';
 
 export default function DatabaseBackup() {
   const [isExporting, setIsExporting] = useState(false);
@@ -18,6 +19,13 @@ export default function DatabaseBackup() {
   const [isResetting, setIsResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [currentDbType, setCurrentDbType] = useState<DatabaseType>('local');
+
+  const handleDatabaseTypeChange = (type: DatabaseType) => {
+    setCurrentDbType(type);
+    setError(null);
+    setSuccess(null);
+  };
 
   // Función para exportar toda la base de datos
   const handleExport = async () => {
@@ -29,7 +37,7 @@ export default function DatabaseBackup() {
       const data = await exportDatabase();
 
       // Convertir a JSON y crear un blob
-      const jsonData = JSON.stringify(data, (key, value) => {
+      const jsonData = JSON.stringify(data, (_key, value) => {
         // Convertir fechas a formato ISO para que se puedan reconstruir
         if (value instanceof Date) {
           return { __type: 'Date', value: value.toISOString() };
@@ -78,7 +86,7 @@ export default function DatabaseBackup() {
       
       try {
         const text = await file.text();
-        const data = JSON.parse(text, (key, value) => {
+        const data = JSON.parse(text, (_key, value) => {
           // Reconstruir objetos Date
           if (value && typeof value === 'object' && value.__type === 'Date') {
             return new Date(value.value);
@@ -172,7 +180,7 @@ export default function DatabaseBackup() {
   return (
     <Paper className="p-6">
       <Typography variant="h6" className="font-semibold mb-4">
-        Copia de Seguridad de la Base de Datos
+        Gestión de Base de Datos
       </Typography>
       <hr className="mt-2 mb-6" />
       
@@ -189,9 +197,14 @@ export default function DatabaseBackup() {
       )}
       
       <Box className="space-y-8">
+        {/* Nueva sección de configuración de base de datos */}
+        <Box>
+          <DatabaseConfig onDatabaseTypeChange={handleDatabaseTypeChange} />
+        </Box>
+
         <Box>
           <Typography variant="subtitle1" className="font-medium mb-4">
-            Exportar/Importar Base de Datos Completa
+            Copia de Seguridad de la Base de Datos ({currentDbType === 'local' ? 'Local' : 'Nube'})
           </Typography>
           <Box className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Button

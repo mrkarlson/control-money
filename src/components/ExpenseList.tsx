@@ -19,10 +19,11 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { format, startOfYear, endOfYear, eachMonthOfInterval, isSameMonth } from 'date-fns';
+import { format, eachMonthOfInterval, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
-import { getExpensesByMonth, deleteExpense, getCurrentBalance, updateExpense } from '../db/services';
+// Usar adaptador de repositorio para respetar la BD activa
+import { getExpensesByMonth, deleteExpense, getCurrentBalance, updateExpense } from '../db';
 
 interface ExpenseListProps {
   currentMonth: Date;
@@ -76,6 +77,16 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
       console.error('Error loading expenses:', error);
     }
   }, [currentMonth]);
+
+  // Recargar datos cuando cambia el tipo de BD (evento global)
+  useEffect(() => {
+    const handler = () => {
+      loadExpenses();
+      loadBalance();
+    };
+    window.addEventListener('dbTypeChanged', handler as any);
+    return () => window.removeEventListener('dbTypeChanged', handler as any);
+  }, [loadExpenses, loadBalance]);
 
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
@@ -140,9 +151,10 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
         });
       }
   
+      // Solo actualizar el flag global isPaid en gastos de una sola vez.
       const updatedExpense = {
         ...expense,
-        isPaid: newPaymentStatus,
+        isPaid: expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
         paymentHistory: updatedPaymentHistory
       };
       await updateExpense(updatedExpense);
@@ -205,7 +217,7 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
           {eachMonthOfInterval({
             start: new Date(new Date().getFullYear() - 1, 0, 1), // Enero del año anterior
             end: new Date(new Date().getFullYear() + 1, 11, 31) // Diciembre del año siguiente
-          }).map((month, index) => {
+          }).map((month) => {
             const isCurrentYear = month.getFullYear() === new Date().getFullYear();
             return (
               <Button

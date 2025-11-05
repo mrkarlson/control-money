@@ -28,21 +28,14 @@ import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import { es } from 'date-fns/locale';
 import { SavingsGoal } from '../db/config';
-import {
-  getAllSavingsGoals,
-  addSavingsGoal,
-  updateSavingsGoal,
-  deleteSavingsGoal,
-  calculateEstimatedCompletion,
-  calculateMonthlyContribution,
-  calculateTimeRemaining
-} from '../db/savingsServices';
+import { calculateEstimatedCompletion, calculateMonthlyContribution, calculateTimeRemaining } from '../db/savingsServices';
+import { getSavingsGoals as getAllSavingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } from '../db';
 import { formatCurrency } from '../utils/formatters';
 import { SAVINGS_CONSTANTS } from '../constants/savings';
 import ProgressBar from './ProgressBar';
 import DateDisplay from './DateDisplay';
 import SavingsSummaryRow from './SavingsSummaryRow';
-import { useSavingsCalculations } from '../hooks/useSavingsCalculations';
+// import { useSavingsCalculations } from '../hooks/useSavingsCalculations'; // No se utiliza actualmente
 
 export default function SavingsList() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
@@ -61,6 +54,9 @@ export default function SavingsList() {
 
   useEffect(() => {
     loadGoals();
+    const handler = () => loadGoals();
+    window.addEventListener('dbTypeChanged', handler as any);
+    return () => window.removeEventListener('dbTypeChanged', handler as any);
   }, []);
 
   const loadGoals = async () => {
@@ -182,6 +178,7 @@ export default function SavingsList() {
               <TableCell align="right">Objetivo</TableCell>
               <TableCell align="right">Actual</TableCell>
               <TableCell align="right">Aporte Mensual</TableCell>
+              <TableCell align="right">Restante</TableCell>
               <TableCell>Progreso</TableCell>
               <TableCell>Fecha Actual</TableCell>
               <TableCell>Fecha Objetivo</TableCell>
@@ -197,6 +194,9 @@ export default function SavingsList() {
                 <TableCell align="right">{formatCurrency(goal.targetAmount)}</TableCell>
                 <TableCell align="right">{formatCurrency(goal.currentAmount)}</TableCell>
                 <TableCell align="right">{formatCurrency(goal.monthlyContribution)}</TableCell>
+                <TableCell align="right">
+                  {formatCurrency(Math.max(goal.targetAmount - goal.currentAmount, 0))}
+                </TableCell>
                 <TableCell>
                   <ProgressBar
                     current={goal.currentAmount}

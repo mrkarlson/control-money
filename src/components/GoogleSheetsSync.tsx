@@ -13,7 +13,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import InfoIcon from '@mui/icons-material/Info';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getGoogleSheetsConfig } from '../db/googleSheetsService';
+import { getGoogleSheetsConfig } from '../db';
 import { exportToGoogleSheets, importFromGoogleSheets } from '../db/googleSheetsSyncService';
 
 export default function GoogleSheetsSync() {
@@ -22,19 +22,12 @@ export default function GoogleSheetsSync() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-  const [syncData, setSyncData] = useState<{
-    month: string;
-    balance: { 
-      amount: number; 
-      monthlyIncome: number;
-      projectedAmount?: number;
-      realAmount?: number;
-    };
-    expenses: { totalPaid: number; totalPending: number };
-  } | null>(null);
 
   useEffect(() => {
     loadLastSyncInfo();
+    const handler = () => loadLastSyncInfo();
+    window.addEventListener('dbTypeChanged', handler as any);
+    return () => window.removeEventListener('dbTypeChanged', handler as any);
   }, []);
 
   const loadLastSyncInfo = async () => {
@@ -61,11 +54,6 @@ export default function GoogleSheetsSync() {
 
       const result = await exportToGoogleSheets();
       setLastSync(result.lastSync);
-      setSyncData({
-        month: result.currentMonth.month,
-        balance: result.currentMonth.balance,
-        expenses: result.currentMonth.expenses
-      });
       
       setSuccess('Datos exportados correctamente a Google Sheets');
     } catch (error) {
@@ -89,11 +77,6 @@ export default function GoogleSheetsSync() {
 
       const result = await importFromGoogleSheets();
       setLastSync(result.lastSync);
-      setSyncData({
-        month: result.currentMonth.month,
-        balance: result.currentMonth.balance,
-        expenses: result.currentMonth.expenses
-      });
       
       setSuccess('Datos importados correctamente desde Google Sheets');
     } catch (error) {
@@ -104,12 +87,6 @@ export default function GoogleSheetsSync() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
 
   return (
     <Paper className="p-4 mt-4">

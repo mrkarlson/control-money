@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -36,17 +36,13 @@ import {
   Calculate as CalculateIcon
 } from '@mui/icons-material';
 import { Investment } from '../db/config';
+import { calculateMaturityValue, calculateDaysToMaturity, calculateTotalReturn } from '../db/investmentServices';
 import {
-  getAllInvestments,
+  getInvestments as getAllInvestments,
   addInvestment,
   updateInvestment,
   deleteInvestment,
-  calculateCurrentValue,
-  calculateMaturityValue,
-  calculateDaysToMaturity,
-  calculateTotalReturn,
-  updateAllInvestmentValues
-} from '../db/investmentServices';
+} from '../db';
 
 interface InvestmentFormData {
   name: string;
@@ -96,14 +92,14 @@ export default function Investments() {
 
   useEffect(() => {
     loadInvestments();
+    const handler = () => loadInvestments();
+    window.addEventListener('dbTypeChanged', handler as any);
+    return () => window.removeEventListener('dbTypeChanged', handler as any);
   }, []);
 
   const loadInvestments = async () => {
     try {
       setLoading(true);
-      const data = await getAllInvestments();
-      // Actualizar valores actuales
-      await updateAllInvestmentValues();
       const updatedData = await getAllInvestments();
       setInvestments(updatedData);
     } catch (err) {
@@ -204,9 +200,6 @@ export default function Investments() {
     }).format(amount);
   };
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('es-ES');
-  };
 
   const getTypeLabel = (type: Investment['type']) => {
     return investmentTypes.find(t => t.value === type)?.label || type;

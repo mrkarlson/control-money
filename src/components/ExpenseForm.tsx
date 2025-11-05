@@ -17,7 +17,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
-import { addExpense, updateExpense } from '../db/services';
+import { addExpense, updateExpense } from '../db';
 
 const categories = [
   'Préstamos',

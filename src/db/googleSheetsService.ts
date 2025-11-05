@@ -1,21 +1,28 @@
-import { getDB } from './config';
 import type { Expense, GoogleSheetsConfig } from './config';
+import {
+  getGoogleSheetsConfig as getConfigFromRepo,
+  saveGoogleSheetsConfig as createConfigInRepo,
+  updateGoogleSheetsConfig as updateConfigInRepo,
+} from './repositoryAdapter';
 
 const GOOGLE_OAUTH2_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+// const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'; // No se usa actualmente
 
 export async function getGoogleSheetsConfig(): Promise<GoogleSheetsConfig | undefined> {
-  const db = await getDB();
-  const tx = db.transaction('sheetConfig', 'readonly');
-  const store = tx.objectStore('sheetConfig');
-  return store.get(1);
+  const configs = await getConfigFromRepo();
+  // Por compatibilidad previa, retornamos la primera configuración (id 1) si existe
+  return configs[0];
 }
 
 export async function saveGoogleSheetsConfig(config: GoogleSheetsConfig): Promise<void> {
-  const db = await getDB();
-  const tx = db.transaction('sheetConfig', 'readwrite');
-  const store = tx.objectStore('sheetConfig');
-  await store.put({ ...config, id: 1 });
+  // Si existe una configuración previa, actualizamos; de lo contrario, creamos
+  const existing = await getGoogleSheetsConfig();
+  if (existing && typeof (existing as any).id === 'number') {
+    await updateConfigInRepo({ ...(existing as any), ...config });
+  } else {
+    const { id, ...rest } = (config as any);
+    await createConfigInRepo(rest);
+  }
 }
 
 export async function syncExpensesToSheet(expenses: Expense[]): Promise<void> {

@@ -4,6 +4,8 @@ import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { initDB } from './db/config'
 import BalanceForm from './components/BalanceForm'
+import DatabaseIndicator from './components/DatabaseIndicator'
+import LogoMark from './components/LogoMark'
 
 function App() {
   const [drawerOpen, setDrawerOpen] = useState(true);
@@ -75,31 +77,38 @@ function App() {
         {/* Sidebar */}
         <aside className={`bg-white dark:bg-gray-800 w-80 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="h-full flex flex-col">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">Control Money</h1>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              >
-                <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setDrawerOpen(false)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Ocultar lateral"
+                  title="Ocultar lateral"
+                >
+                  <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="flex items-center gap-2">
+                  <LogoMark size={28} />
+                  <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">Control Money</h1>
+                </div>
+              </div>
               <button
                 onClick={toggleTheme}
-                className="ml-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 aria-label="Alternar tema"
                 title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               >
                 {theme === 'dark' ? (
                   // Icono de sol
-                  <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M6.05 6.05L4.636 4.636m12.728 0l-1.414 1.414M6.05 17.95l-1.414 1.414" />
                     <circle cx="12" cy="12" r="4" strokeWidth="2" />
                   </svg>
                 ) : (
                   // Icono de luna
-                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" />
                   </svg>
                 )}
@@ -133,7 +142,12 @@ function App() {
                 </div>
               </div>
             </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+              {/* Indicador de tipo de BD en el pie del lateral */}
+              <div className="flex items-center justify-between">
+                <DatabaseIndicator />
+              </div>
+
               <button
                 onClick={() => navigateTo('configuration')}
                 className={`w-full flex items-center justify-start px-4 py-2 rounded-lg transition-colors ${isCurrentPath('configuration') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}

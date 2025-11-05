@@ -181,8 +181,12 @@ export async function getSavingsGoalById(id: number) {
 export async function getSavingsGoalsByStatus(completed: boolean) {
   const db = await getDB();
   const tx = db.transaction('savings', 'readonly');
-  const index = tx.store.index('completed');
-  return index.getAll(completed);
+  // Nota: IndexedDB no permite booleanos como claves de índice (IDBValidKey),
+  // por lo que consultar el índice 'completed' directamente con un booleano
+  // provoca errores de tipos. Para mantener la compatibilidad sin migraciones
+  // de esquema, obtenemos todos los registros y filtramos por el campo booleano.
+  const all = await tx.store.getAll();
+  return all.filter(goal => goal.completed === completed);
 }
 
 // Actualizar la cantidad actual de un objetivo de ahorro
@@ -198,7 +202,7 @@ export async function updateSavingsAmount(id: number, amount: number) {
   goal.completed = amount >= goal.targetAmount;
 
   if (!goal.completed && goal.monthlyContribution > 0) {
-    const { estimatedDate, timeRemaining } = calculateEstimatedCompletion(
+    const { estimatedDate } = calculateEstimatedCompletion(
       goal.currentAmount,
       goal.targetAmount,
       goal.monthlyContribution,

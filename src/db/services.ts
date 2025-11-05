@@ -1,4 +1,4 @@
-import { Expense, Balance, getDB, initDB, ExpenseDB } from './config';
+import { Expense, Balance, getDB, ExpenseDB } from './config';
 import { startOfMonth, endOfMonth, addMonths } from 'date-fns';
 
 // Funciones para exportar e importar la base de datos
@@ -15,6 +15,14 @@ export async function exportDatabase() {
     data.balance = await db.getAll('balance');
   }
   
+  if (db.objectStoreNames.contains('savings')) {
+    data.savings = await db.getAll('savings');
+  }
+
+  if (db.objectStoreNames.contains('investments')) {
+    data.investments = await db.getAll('investments');
+  }
+
   if (db.objectStoreNames.contains('sheetConfig')) {
     data.sheetConfig = await db.getAll('sheetConfig');
   }
@@ -35,7 +43,21 @@ export async function importDatabase(data: Record<string, any[]>) {
     
     // Importar datos
     for (const expense of data.expenses) {
-      await store.add(expense);
+      // Normalizar campos de fecha para asegurar que sean objetos Date
+      const normalized = {
+        ...expense,
+        date: expense?.date instanceof Date ? expense.date : new Date(expense?.date),
+        nextPaymentDate: expense?.nextPaymentDate
+          ? (expense.nextPaymentDate instanceof Date ? expense.nextPaymentDate : new Date(expense.nextPaymentDate))
+          : undefined,
+        paymentHistory: Array.isArray(expense?.paymentHistory)
+          ? expense.paymentHistory.map((record: any) => ({
+              ...record,
+              date: record?.date instanceof Date ? record.date : new Date(record?.date)
+            }))
+          : expense?.paymentHistory
+      };
+      await store.add(normalized);
     }
     
     await tx.done;
@@ -48,7 +70,49 @@ export async function importDatabase(data: Record<string, any[]>) {
     await store.clear();
     
     for (const balance of data.balance) {
-      await store.add(balance);
+      const normalized = {
+        ...balance,
+        date: balance?.date instanceof Date ? balance.date : new Date(balance?.date)
+      };
+      await store.add(normalized);
+    }
+    
+    await tx.done;
+  }
+  
+  if (data.savings && db.objectStoreNames.contains('savings')) {
+    const tx = db.transaction('savings', 'readwrite');
+    const store = tx.objectStore('savings');
+    
+    await store.clear();
+    
+    for (const goal of data.savings) {
+      const normalized = {
+        ...goal,
+        startDate: goal?.startDate instanceof Date ? goal.startDate : new Date(goal?.startDate),
+        targetDate: goal?.targetDate ? (goal.targetDate instanceof Date ? goal.targetDate : new Date(goal.targetDate)) : undefined,
+        completed: Boolean(goal?.completed)
+      };
+      await store.add(normalized);
+    }
+    
+    await tx.done;
+  }
+
+  if (data.investments && db.objectStoreNames.contains('investments')) {
+    const tx = db.transaction('investments', 'readwrite');
+    const store = tx.objectStore('investments');
+    
+    await store.clear();
+    
+    for (const inv of data.investments) {
+      const normalized = {
+        ...inv,
+        startDate: inv?.startDate instanceof Date ? inv.startDate : new Date(inv?.startDate),
+        maturityDate: inv?.maturityDate instanceof Date ? inv.maturityDate : new Date(inv?.maturityDate),
+        isActive: Boolean(inv?.isActive)
+      };
+      await store.add(normalized);
     }
     
     await tx.done;
@@ -61,7 +125,12 @@ export async function importDatabase(data: Record<string, any[]>) {
     await store.clear();
     
     for (const config of data.sheetConfig) {
-      await store.add(config);
+      const normalized = {
+        ...config,
+        tokenExpiry: config?.tokenExpiry instanceof Date ? config.tokenExpiry : new Date(config?.tokenExpiry),
+        lastSync: config?.lastSync ? (config.lastSync instanceof Date ? config.lastSync : new Date(config.lastSync)) : null
+      };
+      await store.add(normalized);
     }
     
     await tx.done;
@@ -110,20 +179,25 @@ export async function getExpensesByMonth(date: Date) {
   const targetYear = date.getFullYear();
 
   const expenses = await db.getAllFromIndex('expenses', 'date');
-  return expenses.filter(expense => {
+  const result: Expense[] = [];
+
+  for (const expense of expenses) {
     const expenseDate = new Date(expense.date);
     if (expense.frequency === 'one-time') {
-      return expenseDate >= start && expenseDate <= end;
+      if (expenseDate >= start && expenseDate <= end) {
+        result.push(expense);
+      }
+      continue;
     }
 
     // For recurring expenses, check if they should appear in this month and are within duration
     const monthDiff = (targetYear - expenseDate.getFullYear()) * 12 + (targetMonth - expenseDate.getMonth());
-    
+
     // If duration is set, check if we're still within the payment period
     if (expense.duration && monthDiff >= expense.duration) {
-      return false;
+      continue;
     }
-    
+
     let shouldInclude = false;
     switch (expense.frequency) {
       case 'monthly':
@@ -139,29 +213,32 @@ export async function getExpensesByMonth(date: Date) {
         shouldInclude = monthDiff >= 0 && monthDiff % 12 === 0;
         break;
       default:
-        return false;
+        shouldInclude = false;
     }
 
     if (shouldInclude) {
       // For recurring expenses, create a copy with isPaid status and amount for this specific month
-      const recurringExpense = { ...expense };
-      
+      const recurringExpense: Expense = { ...expense };
+
       // Check payment history for this specific month
       const paymentRecord = expense.paymentHistory?.find((record: any) => {
         const recordDate = new Date(record.date);
         return recordDate.getMonth() === targetMonth && recordDate.getFullYear() === targetYear;
       });
-      
+
       // Set isPaid and amount based on the payment history for this specific month
-      recurringExpense.isPaid = paymentRecord?.isPaid || false;
-      recurringExpense.amount = paymentRecord?.amount || expense.amount;
-      
-      // Return the recurring expense with the correct isPaid status and amount for this month
-      return recurringExpense;
+      recurringExpense.isPaid = Boolean(paymentRecord?.isPaid);
+      if (paymentRecord && typeof paymentRecord.amount === 'number') {
+        recurringExpense.amount = paymentRecord.amount;
+      } else {
+        recurringExpense.amount = expense.amount;
+      }
+
+      result.push(recurringExpense);
     }
-    
-    return false;
-  });
+  }
+
+  return result;
 }
 
 export async function getAllExpenses() {

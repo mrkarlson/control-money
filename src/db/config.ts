@@ -1,4 +1,4 @@
-import { openDB, IDBPDatabase, IDBPTransaction, StoreNames, IDBPObjectStore } from 'idb';
+import { openDB, IDBPDatabase } from 'idb';
 
 export interface PaymentRecord {
   date: Date;
@@ -148,46 +148,46 @@ function setupInvestmentsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
 }
 
 // Función para manejar la migración de datos después de la actualización
-async function handlePostUpgradeMigrations(db: IDBPDatabase<ExpenseDB>, oldVersion: number) {
-  try {
-    // Migración de expenses (versión < 3)
-    if (oldVersion < 3) {
-      const tx = db.transaction('expenses', 'readwrite');
-      const store = tx.objectStore('expenses');
-      const expenses = await store.getAll();
-      
-      for (const expense of expenses) {
-        if (!expense.paymentHistory) {
-          expense.paymentHistory = [];
-          if (expense.isPaid && expense.nextPaymentDate) {
-            expense.paymentHistory.push({
-              date: new Date(expense.nextPaymentDate),
-              isPaid: true
-            });
-          }
-          await store.put(expense);
-        }
-      }
-      await tx.done;
-    }
-
-    // Migración de balance (versión < 2)
-    if (oldVersion < 2) {
-      const tx = db.transaction('balance', 'readwrite');
-      const store = tx.objectStore('balance');
-      const balances = await store.getAll();
-      
-      for (const balance of balances) {
-        balance.monthlyIncome = balance.monthlyIncome || 0;
-        await store.put(balance);
-      }
-      await tx.done;
-    }
-  } catch (error) {
-    console.error('Error during post-upgrade migrations:', error);
-    throw error;
-  }
-}
+// async function handlePostUpgradeMigrations(db: IDBPDatabase<ExpenseDB>, oldVersion: number) {
+//   try {
+//     // Migración de expenses (versión < 3)
+//     if (oldVersion < 3) {
+//       const tx = db.transaction('expenses', 'readwrite');
+//       const store = tx.objectStore('expenses');
+//       const expenses = await store.getAll();
+//       
+//       for (const expense of expenses) {
+//         if (!expense.paymentHistory) {
+//           expense.paymentHistory = [];
+//           if (expense.isPaid && expense.nextPaymentDate) {
+//             expense.paymentHistory.push({
+//               date: new Date(expense.nextPaymentDate),
+//               isPaid: true
+//             });
+//           }
+//           await store.put(expense);
+//         }
+//       }
+//       await tx.done;
+//     }
+// 
+//     // Migración de balance (versión < 2)
+//     if (oldVersion < 2) {
+//       const tx = db.transaction('balance', 'readwrite');
+//       const store = tx.objectStore('balance');
+//       const balances = await store.getAll();
+//       
+//       for (const balance of balances) {
+//         balance.monthlyIncome = balance.monthlyIncome || 0;
+//         await store.put(balance);
+//       }
+//       await tx.done;
+//     }
+//   } catch (error) {
+//     console.error('Error during post-upgrade migrations:', error);
+//     throw error;
+//   }
+// }
 
 // Función para eliminar completamente la base de datos
 export async function deleteDatabase(): Promise<boolean> {
@@ -204,7 +204,7 @@ export async function deleteDatabase(): Promise<boolean> {
       reject(new Error(`No se pudo eliminar la base de datos: ${(event.target as any).error}`));
     };
     
-    request.onblocked = (event) => {
+    request.onblocked = (_event) => {
       console.warn(`La eliminación de la base de datos ${DB_NAME} está bloqueada, cerrando conexiones...`);
       // Intentamos resolver de todos modos, ya que el usuario puede intentar inicializar después
       resolve(false);
@@ -234,8 +234,30 @@ export async function initDB() {
     console.log(`Stores creados: ${storeNames.join(', ')}`);
     
     if (!storeNames.includes('expenses') || !storeNames.includes('balance') || !storeNames.includes('sheetConfig') || !storeNames.includes('savings') || !storeNames.includes('investments')) {
-      console.error('No se crearon todos los stores necesarios. Stores existentes:', storeNames);
-      throw new Error('Faltan stores en la base de datos');
+      console.warn('Stores faltantes detectados, intentando reiniciar la base de datos...', storeNames);
+      // Intento de recuperación: cerrar, eliminar y recrear la BD
+      try {
+        db.close();
+      } catch {}
+      await deleteDatabase();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const recreated = await openDB<ExpenseDB>(DB_NAME, DB_VERSION, {
+        upgrade(db2, oldVersion: number, newVersion: number | null) {
+          console.log(`Recreating database from version ${oldVersion} to ${newVersion}`);
+          setupExpensesStore(db2);
+          setupBalanceStore(db2);
+          setupSheetConfigStore(db2);
+          setupSavingsStore(db2);
+          setupInvestmentsStore(db2);
+        },
+      });
+      const recreatedStores = Array.from(recreated.objectStoreNames);
+      console.log('Stores después de recreación:', recreatedStores);
+      if (!recreatedStores.includes('expenses') || !recreatedStores.includes('balance') || !recreatedStores.includes('sheetConfig') || !recreatedStores.includes('savings') || !recreatedStores.includes('investments')) {
+        console.error('No se pudieron crear todos los stores necesarios tras la recreación. Stores existentes:', recreatedStores);
+        throw new Error('Faltan stores en la base de datos tras recreación');
+      }
+      return recreated;
     }
 
     return db;

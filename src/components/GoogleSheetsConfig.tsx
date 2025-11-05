@@ -8,9 +8,8 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { getDB } from '../db/config';
-import { validateGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db/googleSheetsService';
-import { createGoogleSheetsConfig } from '../db/config';
+import { validateGoogleSheetsConfig } from '../db/googleSheetsService';
+import { getGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db';
 import DatabaseBackup from './DatabaseBackup';
 import GoogleSheetsSync from './GoogleSheetsSync';
 
@@ -39,27 +38,19 @@ export default function GoogleSheetsConfig() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [storeExists, setStoreExists] = useState(false);
+  // Al usar el adaptador de repositorio, asumimos que la capa de datos está disponible
 
   useEffect(() => {
     loadConfig();
+    const handler = () => loadConfig();
+    window.addEventListener('dbTypeChanged', handler as any);
+    return () => window.removeEventListener('dbTypeChanged', handler as any);
   }, []);
 
   const loadConfig = async () => {
     try {
-      const db = await getDB();
-      const exists = db.objectStoreNames.contains('sheetConfig');
-      setStoreExists(exists);
-      
-      if (!exists) {
-        console.warn('El almacén googleSheetsConfig no existe. Use el botón "Crear almacén" para crearlo.');
-        return;
-      }
-      
-      const tx = db.transaction('sheetConfig', 'readonly');
-      const store = tx.objectStore('sheetConfig');
-      const savedConfig = await store.get(1);
-      
+      const configs = await getGoogleSheetsConfig();
+      const savedConfig = Array.isArray(configs) ? (configs[0] as any) : undefined;
       if (savedConfig) {
         setConfig(savedConfig);
       }
@@ -69,20 +60,7 @@ export default function GoogleSheetsConfig() {
     }
   };
 
-  const handleCreateStore = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await createGoogleSheetsConfig();
-      setStoreExists(true);
-      setSuccess('Almacén de configuración creado correctamente');
-    } catch (error) {
-      console.error('Error creating config store:', error);
-      setError('Error al crear el almacén de configuración');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // La creación explícita del almacén ya no es necesaria al usar el patrón Repository
 
   const saveConfig = async () => {
     setIsLoading(true);
@@ -101,17 +79,10 @@ export default function GoogleSheetsConfig() {
         throw new Error('La configuración proporcionada no es válida. Por favor, verifica tus credenciales y los datos de la hoja de cálculo.');
       }
 
-      const db = await getDB();
-      const tx = db.transaction('sheetConfig', 'readwrite');
-      const store = tx.objectStore('sheetConfig');
-      
-      await store.put({
+      await saveGoogleSheetsConfig({
         ...config,
-        id: 1,
-        lastSync: null // Resetear la última sincronización al actualizar la configuración
-      });
-
-      await tx.oncomplete; // Esperar a que la transacción se complete
+        lastSync: null,
+      } as any);
       setSuccess('Configuración guardada correctamente');
     } catch (error) {
       console.error('Error saving Google Sheets config:', error);
@@ -200,24 +171,7 @@ export default function GoogleSheetsConfig() {
         </Typography>
         <hr className="mt-2 mb-6" />
 
-        {!storeExists ? (
-          <Box className="flex flex-col gap-6">
-            <Alert severity="warning" className="mb-4">
-              El almacén de configuración no existe. Créalo para comenzar.
-            </Alert>
-            <Button
-              variant="contained"
-              onClick={handleCreateStore}
-              disabled={isLoading}
-              className="w-full mt-4"
-            >
-              {isLoading ? (
-                <CircularProgress size={24} className="mr-2" />
-              ) : null}
-              Crear almacén de configuración
-            </Button>
-          </Box>
-        ) : (
+        {
           <Box className="flex flex-col gap-8">
             <Box className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <TextField
@@ -287,7 +241,7 @@ export default function GoogleSheetsConfig() {
               </Box>
             </Box>
           </Box>
-        )}
+        }
       </Paper>
 
       <GoogleSheetsSync />
