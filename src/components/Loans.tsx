@@ -27,6 +27,7 @@ import {
   Alert,
   Tooltip
 } from '@mui/material';
+import { useMediaQuery, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -36,6 +37,7 @@ import {
   Calculate as CalculateIcon
 } from '@mui/icons-material';
 import { Investment } from '../db/config';
+import AnnualOverview from './AnnualOverview';
 import { calculateMaturityValue, calculateDaysToMaturity, calculateTotalReturn } from '../db/investmentServices';
 import {
   getInvestments as getAllInvestments,
@@ -89,6 +91,13 @@ export default function Investments() {
   const [formData, setFormData] = useState<InvestmentFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMobileOrTablet = useMediaQuery('(max-width:1024px)');
+  const [viewMode, setViewMode] = useState<'annual' | 'investments'>('investments');
+
+  useEffect(() => {
+    // En móvil/tablet, por defecto mostrar la vista Anual
+    setViewMode(isMobileOrTablet ? 'annual' : 'investments');
+  }, [isMobileOrTablet]);
 
   useEffect(() => {
     loadInvestments();
@@ -214,6 +223,26 @@ export default function Investments() {
   const totalCurrentValue = investments.reduce((sum, inv) => sum + inv.currentAmount, 0);
   const totalGains = totalCurrentValue - totalInvested;
   const totalReturnPercentage = totalInvested > 0 ? (totalGains / totalInvested) * 100 : 0;
+
+  // Si el modo es 'annual', renderizar el Resumen Anual dentro de esta misma ruta
+  if (viewMode === 'annual') {
+    return (
+      <Box sx={{ mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(_, v) => v && setViewMode(v)}
+            size="small"
+          >
+            <ToggleButton value="annual">Anual</ToggleButton>
+            <ToggleButton value="investments">Inversiones</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+        <AnnualOverview />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ mt: 4 }}>

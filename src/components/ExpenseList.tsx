@@ -15,7 +15,13 @@ import {
   Stack,
   Checkbox,
   Button,
-  TextField
+  TextField,
+  useMediaQuery,
+  Card,
+  CardContent,
+  CardActions,
+  Divider,
+  Grid
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -32,12 +38,21 @@ interface ExpenseListProps {
   onMonthChange: (month: Date) => void;
 }
 
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(amount);
+};
+
 export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDeleted, onMonthChange }: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'description', direction: 'asc' });
   const [balance, setBalance] = useState<{ amount: number; monthlyIncome: number } | null>(null);
+  const isMobile = useMediaQuery('(max-width:900px)');
+  const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
 
   const calculateBalances = (currentBalance: { amount: number; monthlyIncome: number } | null) => {
     if (!currentBalance) return { realBalance: 0, projectedBalance: 0 };
@@ -59,6 +74,17 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
 
     return { realBalance, projectedBalance };
   };
+
+  const filtered = formatCurrency(
+    expenses
+      .filter(expense => {
+        const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
+        const matchesSearch = searchText === '' || 
+          expense.description.toLowerCase().includes(searchText.toLowerCase());
+        return matchesCategory && matchesSearch;
+      })
+      .reduce((sum, expense) => sum + expense.amount, 0)
+  );
 
   const loadBalance = useCallback(async () => {
     try {
@@ -111,12 +137,7 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
     return labels[frequency];
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
+
 
   const handlePaymentToggle = async (expense: Expense) => {
     if (!expense.id) return;
@@ -265,106 +286,251 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
           })}
         </Box>
       </Box>
-      <Box sx={{ mb: 2, p: 2, bgcolor: 'background.paper' }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ mr: 2 }}>
-            {format(currentMonth, 'yyyy')}
-          </Typography>
-          <Typography variant="subtitle1">
-            Total Gastos: {formatCurrency(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
-          </Typography>
-          <Typography variant="subtitle1" color="success.main">
-            Pagados: {formatCurrency(expenses.reduce((sum, expense) => {
-              const currentMonthPayment = expense.paymentHistory?.find(record => 
-                isSameMonth(new Date(record.date), currentMonth)
-              );
-              return currentMonthPayment?.isPaid ? sum + expense.amount : sum;
-            }, 0))}
-          </Typography>
-          <Typography variant="subtitle1" color="error.main">
-            Pendientes: {formatCurrency(expenses.reduce((sum, expense) => {
-              const currentMonthPayment = expense.paymentHistory?.find(record => 
-                isSameMonth(new Date(record.date), currentMonth)
-              );
-              return !currentMonthPayment?.isPaid ? sum + expense.amount : sum;
-            }, 0))}
-          </Typography>
-          {balance && (
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Typography 
-                variant="subtitle1" 
-                sx={{
-                  color: calculateBalances(balance).realBalance >= 0 ? "success.main" : "error.main",
-                  fontWeight: 'bold'
-                }}
-              >
-                Balance Real: {formatCurrency(calculateBalances(balance).realBalance)}
+      {/* Cabecera de resumen: responsive y sticky en móvil */}
+      <Paper
+        sx={{
+          mb: 2,
+          p: 2,
+          bgcolor: 'background.paper',
+          position: isTabletOrMobile ? 'sticky' : 'relative',
+          top: isTabletOrMobile ? 0 : 'auto',
+          zIndex: 10,
+          border: 1,
+          borderColor: 'divider',
+          backdropFilter: isTabletOrMobile ? 'blur(6px)' : 'none'
+        }}
+      >
+        {(() => {
+          const totalMonth = expenses.reduce((sum, e) => sum + e.amount, 0);
+          const paidMonth = expenses.reduce((sum, e) => {
+            const ph = e.paymentHistory?.find(record => isSameMonth(new Date(record.date), currentMonth));
+            return ph?.isPaid ? sum + e.amount : sum;
+          }, 0);
+          const pendingMonth = totalMonth - paidMonth;
+
+          const balances = balance ? calculateBalances(balance) : { realBalance: 0, projectedBalance: 0 };
+
+          return (
+            <Box>
+              <Typography variant="h6" marginBottom={1}>
+                Gastos de {format(currentMonth, 'MMMM yyyy', { locale: es })}
               </Typography>
-              <Typography 
-                variant="subtitle1" 
-                sx={{
-                  color: calculateBalances(balance).projectedBalance >= 0 ? "success.main" : "error.main",
-                  fontWeight: 'bold'
-                }}
-              >
-                Balance Proyectado: {formatCurrency(calculateBalances(balance).projectedBalance)}
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: '15px', flexWrap: "wrap" }}>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Typography 
+                    variant="subtitle2" 
+                    sx={{ color: balances.realBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 700 }}
+                  >
+                    Real: {formatCurrency(balances.realBalance)}
+                  </Typography>
+                  <Typography 
+                    variant="subtitle2" 
+                    sx={{ color: balances.projectedBalance >= 0 ? 'success.main' : 'error.main', fontWeight: 700 }}
+                  >
+                    Proy: {formatCurrency(balances.projectedBalance)}
+                  </Typography>
+                  {searchText && (
+                    <Typography 
+                      variant="subtitle2" 
+                      sx={{ fontWeight: 700 }}
+                    >
+                      Filtrado: {filtered}
+                    </Typography>
+                  )}
+                </Box>
+                <Box>
+                  <TextField
+                    label="Buscar por descripción"
+                    variant="outlined"
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    size="small"
+                    sx={{ fontSize: '0.875rem' }}
+                  />
+                </Box>
+                
+              </Box>
+
+              <Grid container spacing={1} sx={{ flexWrap: 'nowrap' }}>
+                <Grid item xs={4} sm={4}>
+                  <Box sx={{ p: { xs: 1, sm: 1.25 }, borderRadius: 1, bgcolor: 'action.hover' }}>
+                    <Typography variant="caption" color="text.secondary">Total gastos</Typography>
+                    <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(totalMonth)}</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={4} sm={4}>
+                  <Box sx={{ p: { xs: 1, sm: 1.25 }, borderRadius: 1, bgcolor: 'action.hover' }}>
+                    <Typography variant="caption" color="text.secondary">Pagados</Typography>
+                    <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} color="success.main" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(paidMonth)}</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={4} sm={4}>
+                  <Box sx={{ p: { xs: 1, sm: 1.25 }, borderRadius: 1, bgcolor: 'action.hover' }}>
+                    <Typography variant="caption" color="text.secondary">Pendientes</Typography>
+                    <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} color="error.main" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(pendingMonth)}</Typography>
+                  </Box>
+                </Grid>
+              </Grid>
             </Box>
-          )}
-          <Typography variant="subtitle1">
-            Total Filtrado: {formatCurrency(
-              expenses
-                .filter(expense => {
-                  const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
-                  const matchesSearch = searchText === '' || 
-                    expense.description.toLowerCase().includes(searchText.toLowerCase());
-                  return matchesCategory && matchesSearch;
-                })
-                .reduce((sum, expense) => sum + expense.amount, 0)
-            )}
-          </Typography>
+          );
+        })()}
+      </Paper>
+
+      <Box sx={{ mb: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1,
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            scrollBehavior: 'smooth',
+            py: 0.5,
+            px: 0.5,
+            flexWrap: 'nowrap',
+            WebkitOverflowScrolling: 'touch',
+            '& > *': {
+              flex: '0 0 auto'
+            },
+            '&::-webkit-scrollbar': {
+              height: '8px'
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1',
+              borderRadius: '4px'
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#888',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#555'
+              }
+            }
+          }}
+        >
+          <Chip
+            label="Todas"
+            onClick={() => setSelectedCategory(null)}
+            color={selectedCategory === null ? 'primary' : 'default'}
+          />
+          {Array.from(new Set(expenses.map(e => e.category))).map(category => (
+            <Chip
+              key={category}
+              label={category}
+              onClick={() => setSelectedCategory(category)}
+              color={selectedCategory === category ? 'primary' : 'default'}
+            />
+          ))}
         </Box>
       </Box>
 
-      <Typography variant="h6" gutterBottom>
-        Gastos de {format(currentMonth, 'MMMM yyyy', { locale: es })}
-      </Typography>
+      {isMobile ? (
+        <Box>
+          {expenses
+            .filter(expense => {
+              const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
+              const matchesSearch = searchText === '' || 
+                expense.description.toLowerCase().includes(searchText.toLowerCase());
+              return matchesCategory && matchesSearch;
+            })
+            .sort((a, b) => {
+              const currentMonthPaymentA = a.paymentHistory?.find(record => 
+                isSameMonth(new Date(record.date), currentMonth)
+              );
+              const currentMonthPaymentB = b.paymentHistory?.find(record => 
+                isSameMonth(new Date(record.date), currentMonth)
+              );
+              const isPaidA = currentMonthPaymentA?.isPaid || false;
+              const isPaidB = currentMonthPaymentB?.isPaid || false;
 
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          fullWidth
-          label="Buscar por descripción"
-          variant="outlined"
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          size="small"
-          sx={{ mb: 2 }}
-        />
-      </Box>
+              switch (sortConfig.key) {
+                case 'description':
+                  return sortConfig.direction === 'asc' 
+                    ? a.description.localeCompare(b.description)
+                    : b.description.localeCompare(a.description);
+                case 'date':
+                  return sortConfig.direction === 'asc'
+                    ? new Date(a.date).getTime() - new Date(b.date).getTime()
+                    : new Date(b.date).getTime() - new Date(a.date).getTime();
+                case 'status':
+                  if (isPaidA === isPaidB) return 0;
+                  if (sortConfig.direction === 'asc') {
+                    return isPaidA ? 1 : -1;
+                  } else {
+                    return isPaidA ? -1 : 1;
+                  }
+                default:
+                  return 0;
+              }
+            })
+            .map((expense) => {
+              const currentMonthPayment = expense.paymentHistory?.find(record => 
+                isSameMonth(new Date(record.date), currentMonth)
+              );
+              const isPaidInCurrentMonth = currentMonthPayment?.isPaid || false;
 
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        <Chip
-          label="Todas"
-          onClick={() => setSelectedCategory(null)}
-          color={selectedCategory === null ? 'primary' : 'default'}
-        />
-        {Array.from(new Set(expenses.map(e => e.category))).map(category => (
-          <Chip
-            key={category}
-            label={category}
-            onClick={() => setSelectedCategory(category)}
-            color={selectedCategory === category ? 'primary' : 'default'}
-          />
-        ))}
-      </Stack>
+              return (
+                <Card key={expense.id} variant="outlined" sx={{ mb: 1 }}>
+                  <CardContent sx={{ pb: 1.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{expense.description}</Typography>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{formatCurrency(expense.amount)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                      <Chip size="small" label={expense.category} />
+                      <Chip size="small" label={format(new Date(expense.date), 'dd/MM/yyyy')} />
+                      <Chip size="small" label={getFrequencyLabel(expense.frequency)} />
+                    </Box>
 
-      <TableContainer component={Paper}>
-        <Table size="small" sx={{ 
+                    <Divider sx={{ my: 1 }} />
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Checkbox
+                        checked={isPaidInCurrentMonth}
+                        onChange={() => handlePaymentToggle(expense)}
+                        size="small"
+                      />
+                      <Chip
+                        size="small"
+                        color={isPaidInCurrentMonth ? 'success' : 'error'}
+                        label={isPaidInCurrentMonth ? 'Pagado' : 'Pendiente'}
+                      />
+                    </Box>
+                  </CardContent>
+                  <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+                    <IconButton size="small" onClick={() => expense.id && onEditExpense(expense)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => expense.id && handleDelete(expense.id!)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </CardActions>
+                </Card>
+              );
+            })}
+          {expenses.length === 0 && (
+            <Paper sx={{ p: 2, textAlign: 'center' }}>No hay gastos registrados para este mes</Paper>
+          )}
+        </Box>
+      ) : (
+        <TableContainer 
+          component={Paper} 
+          sx={{ 
+            bgcolor: (theme) => theme.palette.mode === 'dark'
+              ? 'rgba(17, 24, 39, 0.94)' // gris muy oscuro (tailwind slate-900 aprox)
+              : theme.palette.background.paper,
+            borderColor: (theme) => theme.palette.divider
+          }}
+        >
+          <Table size="small" sx={{ 
+          backgroundColor: (theme) => theme.palette.mode === 'dark'
+            ? 'transparent'
+            : theme.palette.background.paper,
           '& .MuiTableCell-root': { 
             padding: '12px',
             border: (theme) => `1px solid ${theme.palette.divider}`,
             boxShadow: '0px 1px 2px rgba(0,0,0,0.05)',
-            transition: 'all 0.2s ease'
+            transition: 'all 0.2s ease',
+            color: (theme) => theme.palette.text.primary
           },
           '& .MuiTableHead-root': {
             '& .MuiTableCell-root': {
@@ -389,7 +555,7 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
           }
         }}>
           <TableHead>
-            <TableRow sx={{ backgroundColor: 'background.paper' }}>
+            <TableRow>
               <TableCell 
                 sx={{ 
                   fontWeight: 600,
@@ -649,22 +815,14 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
             <TableRow>
               <TableCell>Total Filtrado</TableCell>
               <TableCell align="right">
-                {formatCurrency(
-                  expenses
-                    .filter(expense => {
-                      const matchesCategory = selectedCategory === null || expense.category === selectedCategory;
-                      const matchesSearch = searchText === '' || 
-                        expense.description.toLowerCase().includes(searchText.toLowerCase());
-                      return matchesCategory && matchesSearch;
-                    })
-                    .reduce((sum, expense) => sum + expense.amount, 0)
-                )}
+                {filtered}
               </TableCell>
               <TableCell colSpan={5}></TableCell>
             </TableRow>
           </TableFooter>
         </Table>
       </TableContainer>
+      )}
     </Box>
   );
 }

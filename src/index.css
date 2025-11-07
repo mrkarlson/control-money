@@ -8,6 +8,8 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Altura estimada de la BottomNavigation en móvil (puedes ajustar si cambias el tamaño) */
+  --bottom-nav-height: 88px;
 }
 
 a {
@@ -26,5 +28,16 @@ a:hover {
 @layer base {
   body {
     @apply m-0 min-h-screen bg-gray-50 text-gray-900 transition-colors duration-200 dark:bg-gray-900 dark:text-gray-100;
+  }
+}
+
+/* Utilidades globales para respetar la safe-area en móviles y evitar solapamiento con la BottomNavigation */
+@layer utilities {
+  .with-bottom-nav-safe-area {
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
