@@ -6,6 +6,8 @@ import {
   CardContent,
   Grid,
   Button,
+  Divider,
+  CardActions,
   Table,
   TableBody,
   TableCell,
@@ -25,9 +27,10 @@ import {
   InputLabel,
   Select,
   Alert,
-  Tooltip
+  Tooltip,
+  Fab
 } from '@mui/material';
-import { useMediaQuery, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { useMediaQuery } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -37,7 +40,6 @@ import {
   Calculate as CalculateIcon
 } from '@mui/icons-material';
 import { Investment } from '../db/config';
-import AnnualOverview from './AnnualOverview';
 import { calculateMaturityValue, calculateDaysToMaturity, calculateTotalReturn } from '../db/investmentServices';
 import {
   getInvestments as getAllInvestments,
@@ -91,13 +93,9 @@ export default function Investments() {
   const [formData, setFormData] = useState<InvestmentFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isMobileOrTablet = useMediaQuery('(max-width:1024px)');
-  const [viewMode, setViewMode] = useState<'annual' | 'investments'>('investments');
-
-  useEffect(() => {
-    // En móvil/tablet, por defecto mostrar la vista Anual
-    setViewMode(isMobileOrTablet ? 'annual' : 'investments');
-  }, [isMobileOrTablet]);
+  const isMobile = useMediaQuery('(max-width:900px)');
+  const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
+  // En inversiones no necesitamos pestaña de vista anual, sólo la lista de inversiones
 
   useEffect(() => {
     loadInvestments();
@@ -224,41 +222,16 @@ export default function Investments() {
   const totalGains = totalCurrentValue - totalInvested;
   const totalReturnPercentage = totalInvested > 0 ? (totalGains / totalInvested) * 100 : 0;
 
-  // Si el modo es 'annual', renderizar el Resumen Anual dentro de esta misma ruta
-  if (viewMode === 'annual') {
-    return (
-      <Box sx={{ mt: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={(_, v) => v && setViewMode(v)}
-            size="small"
-          >
-            <ToggleButton value="annual">Anual</ToggleButton>
-            <ToggleButton value="investments">Inversiones</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-        <AnnualOverview />
-      </Box>
-    );
-  }
+  // Nota: renderizamos todo en un único retorno para evitar el estrechamiento de tipos de TypeScript
 
   return (
     <Box sx={{ mt: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          Inversiones
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-          sx={{ mb: 2 }}
-        >
-          Nueva Inversión
-        </Button>
-      </Box>
+      {/* Cabecera igual que en Gastos/Ahorros: solo título arriba en grande */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-gray-100">Inversiones</h1>
+        </div>
+      </div>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -266,181 +239,306 @@ export default function Investments() {
         </Alert>
       )}
 
-      {/* Resumen de inversiones */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <AccountBalanceIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="h6">Total Invertido</Typography>
-              </Box>
-              <Typography variant="h4" color="primary">
-                {formatCurrency(totalInvested)}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <TrendingUpIcon color="success" sx={{ mr: 1 }} />
-                <Typography variant="h6">Valor Actual</Typography>
-              </Box>
-              <Typography variant="h4" color="success.main">
-                {formatCurrency(totalCurrentValue)}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <CalculateIcon color="info" sx={{ mr: 1 }} />
-                <Typography variant="h6">Ganancias</Typography>
-              </Box>
-              <Typography 
-                variant="h4" 
-                color={totalGains >= 0 ? 'success.main' : 'error.main'}
-              >
-                {formatCurrency(totalGains)}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <TrendingUpIcon color="secondary" sx={{ mr: 1 }} />
-                <Typography variant="h6">Rendimiento</Typography>
-              </Box>
-              <Typography 
-                variant="h4" 
-                color={totalReturnPercentage >= 0 ? 'success.main' : 'error.main'}
-              >
-                {totalReturnPercentage.toFixed(2)}%
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Tabla de inversiones */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Nombre</TableCell>
-              <TableCell>Tipo</TableCell>
-              <TableCell align="right">Inversión Inicial</TableCell>
-              <TableCell align="right">Valor Actual</TableCell>
-              <TableCell align="right">Tasa Anual</TableCell>
-              <TableCell align="center">Fecha Inicio</TableCell>
-              <TableCell align="center">Plazo</TableCell>
-              <TableCell align="center">Días Restantes</TableCell>
-              <TableCell align="right">Ganancia Esperada</TableCell>
-              <TableCell align="center">Estado</TableCell>
-              <TableCell align="center">Acciones</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {investments.map((investment) => {
-              const daysToMaturity = calculateDaysToMaturity(investment);
-              const { totalReturn, returnPercentage } = calculateTotalReturn(investment);
-              const maturityValue = calculateMaturityValue(investment);
-              
-              return (
-                <TableRow key={investment.id}>
-                  <TableCell>
-                    <Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        {investment.name}
-                      </Typography>
-                      {investment.notes && (
-                        <Typography variant="caption" color="text.secondary">
-                          {investment.notes}
-                        </Typography>
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>{getTypeLabel(investment.type)}</TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(investment.initialAmount)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(investment.currentAmount)}
-                  </TableCell>
-                  <TableCell align="right">{investment.annualRate}%</TableCell>
-                  <TableCell align="center">
-                    {investment.startDate.toLocaleDateString('es-ES')}
-                  </TableCell>
-                  <TableCell align="center">
-                    {investment.termMonths} meses
-                    <br />
-                    <Typography variant="caption" color="text.secondary">
-                      {getFrequencyLabel(investment.compoundingFrequency)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={daysToMaturity > 0 ? `${daysToMaturity} días` : 'Vencido'}
-                      color={daysToMaturity > 30 ? 'success' : daysToMaturity > 0 ? 'warning' : 'error'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title={`Valor al vencimiento: ${formatCurrency(maturityValue)}`}>
-                      <Box>
-                        <Typography variant="body2" fontWeight="bold">
-                          {formatCurrency(totalReturn)}
-                        </Typography>
-                        <Typography variant="caption" color="success.main">
-                          +{returnPercentage.toFixed(2)}%
-                        </Typography>
-                      </Box>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={investment.isActive ? 'Activa' : 'Inactiva'}
-                      color={investment.isActive ? 'success' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpenDialog(investment)}
-                      color="primary"
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDelete(investment.id!)}
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {investments.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={11} align="center">
-                  <Typography variant="body2" color="text.secondary">
-                    No hay inversiones registradas
+      <>
+        {/* Resumen de inversiones */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <AccountBalanceIcon color="primary" sx={{ mr: 1 }} />
+                    <Typography variant="h6">Total Invertido</Typography>
+                  </Box>
+                  <Typography variant="h4" color="primary">
+                    {formatCurrency(totalInvested)}
                   </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <TrendingUpIcon color="success" sx={{ mr: 1 }} />
+                    <Typography variant="h6">Valor Actual</Typography>
+                  </Box>
+                  <Typography variant="h4" color="success.main">
+                    {formatCurrency(totalCurrentValue)}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <CalculateIcon color="info" sx={{ mr: 1 }} />
+                    <Typography variant="h6">Ganancias</Typography>
+                  </Box>
+                  <Typography 
+                    variant="h4" 
+                    color={totalGains >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {formatCurrency(totalGains)}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <TrendingUpIcon color="secondary" sx={{ mr: 1 }} />
+                    <Typography variant="h6">Rendimiento</Typography>
+                  </Box>
+                  <Typography 
+                    variant="h4" 
+                    color={totalReturnPercentage >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {totalReturnPercentage.toFixed(2)}%
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
+        {/* Lista de tarjetas en móvil o tabla en desktop */}
+          {isMobile ? (
+            <Box>
+              {investments.map((investment) => {
+                const daysToMaturity = calculateDaysToMaturity(investment);
+                const { totalReturn, returnPercentage } = calculateTotalReturn(investment);
+                const maturityValue = calculateMaturityValue(investment);
+                return (
+                  <Card key={investment.id} variant="outlined" sx={{ mb: 1 }}>
+                    <CardContent sx={{ pb: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{investment.name}</Typography>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{formatCurrency(investment.currentAmount)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                        <Chip size="small" label={getTypeLabel(investment.type)} />
+                        <Chip size="small" label={`${investment.termMonths} meses`} />
+                        <Chip size="small" label={`${investment.annualRate}% TAE`} />
+                        <Chip size="small" label={investment.startDate.toLocaleDateString('es-ES')} />
+                      </Box>
+                      <Divider sx={{ my: 1 }} />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between' }}>
+                        <Chip
+                          label={daysToMaturity > 0 ? `${daysToMaturity} días` : 'Vencido'}
+                          color={daysToMaturity > 30 ? 'success' : daysToMaturity > 0 ? 'warning' : 'error'}
+                          size="small"
+                        />
+                        <Tooltip title={`Valor al vencimiento: ${formatCurrency(maturityValue)}`}>
+                          <Box>
+                            <Typography variant="body2" fontWeight="bold">
+                              {formatCurrency(totalReturn)}
+                            </Typography>
+                            <Typography variant="caption" color="success.main">
+                              +{returnPercentage.toFixed(2)}%
+                            </Typography>
+                          </Box>
+                        </Tooltip>
+                      </Box>
+                    </CardContent>
+                    <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+                      <IconButton size="small" onClick={() => handleOpenDialog(investment)} color="primary">
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleDelete(investment.id!)} color="error">
+                        <DeleteIcon />
+                      </IconButton>
+                    </CardActions>
+                  </Card>
+                );
+              })}
+              {investments.length === 0 && (
+                <Paper sx={{ p: 2, textAlign: 'center' }}>No hay inversiones registradas</Paper>
+              )}
+            </Box>
+          ) : (
+            /* Tabla de inversiones */
+            <TableContainer 
+              component={Paper}
+              sx={{ 
+                bgcolor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(17, 24, 39, 0.94)'
+                  : theme.palette.background.paper,
+                borderColor: (theme) => theme.palette.divider
+              }}
+            >
+              <Table size="small" sx={{
+                backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'transparent' : theme.palette.background.paper,
+                '& .MuiTableCell-root': {
+                  padding: '12px',
+                  border: (theme) => `1px solid ${theme.palette.divider}`,
+                  boxShadow: '0px 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s ease',
+                  color: (theme) => theme.palette.text.primary
+                },
+                '& .MuiTableHead-root': {
+                  '& .MuiTableCell-root': {
+                    backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                      ? 'rgba(55, 65, 81, 0.95)'
+                      : 'rgba(245, 245, 245, 0.95)',
+                    fontWeight: '600',
+                    borderBottom: (theme) => `2px solid ${theme.palette.divider}`,
+                    backdropFilter: 'blur(4px)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 1,
+                    color: (theme) => theme.palette.text.primary
+                  }
+                },
+                '& .MuiTableRow-root:hover': {
+                  '& .MuiTableCell-root': {
+                    backgroundColor: (theme) => theme.palette.mode === 'dark'
+                      ? 'rgba(75, 85, 99, 0.6)'
+                      : 'rgba(245, 245, 245, 0.6)'
+                  }
+                }
+              }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Nombre</TableCell>
+                  <TableCell>Tipo</TableCell>
+                  <TableCell align="right">Inversión Inicial</TableCell>
+                  <TableCell align="right">Valor Actual</TableCell>
+                  <TableCell align="right">Tasa Anual</TableCell>
+                  <TableCell align="center">Fecha Inicio</TableCell>
+                  <TableCell align="center">Plazo</TableCell>
+                  <TableCell align="center">Días Restantes</TableCell>
+                  <TableCell align="right">Ganancia Esperada</TableCell>
+                  <TableCell align="center">Estado</TableCell>
+                  <TableCell align="center">Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                  {investments.map((investment) => {
+                    const daysToMaturity = calculateDaysToMaturity(investment);
+                    const { totalReturn, returnPercentage } = calculateTotalReturn(investment);
+                    const maturityValue = calculateMaturityValue(investment);
+                    
+                    return (
+                      <TableRow key={investment.id}>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2" fontWeight="bold">
+                              {investment.name}
+                            </Typography>
+                            {investment.notes && (
+                              <Typography variant="caption" color="text.secondary">
+                                {investment.notes}
+                              </Typography>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>{getTypeLabel(investment.type)}</TableCell>
+                        <TableCell align="right">
+                          {formatCurrency(investment.initialAmount)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {formatCurrency(investment.currentAmount)}
+                        </TableCell>
+                        <TableCell align="right">{investment.annualRate}%</TableCell>
+                        <TableCell align="center">
+                          {investment.startDate.toLocaleDateString('es-ES')}
+                        </TableCell>
+                        <TableCell align="center">
+                          {investment.termMonths} meses
+                          <br />
+                          <Typography variant="caption" color="text.secondary">
+                            {getFrequencyLabel(investment.compoundingFrequency)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={daysToMaturity > 0 ? `${daysToMaturity} días` : 'Vencido'}
+                            color={daysToMaturity > 30 ? 'success' : daysToMaturity > 0 ? 'warning' : 'error'}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Tooltip title={`Valor al vencimiento: ${formatCurrency(maturityValue)}`}>
+                            <Box>
+                              <Typography variant="body2" fontWeight="bold">
+                                {formatCurrency(totalReturn)}
+                              </Typography>
+                              <Typography variant="caption" color="success.main">
+                                +{returnPercentage.toFixed(2)}%
+                              </Typography>
+                            </Box>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={investment.isActive ? 'Activa' : 'Inactiva'}
+                            color={investment.isActive ? 'success' : 'default'}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenDialog(investment)}
+                            color="primary"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDelete(investment.id!)}
+                            color="error"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {investments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={11} align="center">
+                        <Typography variant="body2" color="text.secondary">
+                          No hay inversiones registradas
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+      </>
+
+      {/* Botón flotante verde (FAB) para añadir inversión */}
+      <Tooltip title="Añadir inversión" placement="left">
+        <Fab
+          aria-label="Añadir inversión"
+          size="small"
+          onClick={() => handleOpenDialog()}
+          sx={{
+            position: 'fixed',
+            right: 'calc(env(safe-area-inset-right) + 16px)',
+            bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) - 16px)',
+            zIndex: 1000,
+            width: 40,
+            height: 40,
+            minWidth: 40,
+            minHeight: 40,
+            background: 'linear-gradient(90deg, #10B981, #059669)',
+            color: '#fff',
+            boxShadow: '0 8px 20px rgba(16, 185, 129, 0.35)',
+            border: '1px solid rgba(255,255,255,0.25)',
+            '&:hover': {
+              background: 'linear-gradient(90deg, #059669, #047857)',
+              boxShadow: '0 10px 24px rgba(5, 150, 105, 0.45)'
+            }
+          }}
+        >
+          <AddIcon fontSize="small" />
+        </Fab>
+      </Tooltip>
 
       {/* Dialog para agregar/editar inversión */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
