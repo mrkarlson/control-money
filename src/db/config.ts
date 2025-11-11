@@ -56,7 +56,7 @@ export interface Investment {
 }
 
 const DB_NAME = 'expense-tracker';
-const DB_VERSION = 76; // Incrementamos la versión para corregir problemas de inicialización
+const DB_VERSION = 77; // Incrementamos la versión para corregir problemas de inicialización
 
 export interface GoogleSheetsConfig {
   id?: number;
@@ -68,6 +68,15 @@ export interface GoogleSheetsConfig {
   spreadsheetId: string;
   sheetName: string;
   lastSync: Date | null;
+}
+
+// Configuración de BD en la nube (guardada localmente en IndexedDB)
+export interface CloudDbConfig {
+  id?: number;
+  provider: 'turso';
+  url: string;
+  authToken: string;
+  updatedAt: Date;
 }
 
 // Definición de tipos para la base de datos
@@ -96,6 +105,11 @@ export type ExpenseDB = {
     key: number;
     value: Investment;
     indexes: { 'startDate': Date; 'type': string; 'isActive': boolean; 'maturityDate': Date };
+  };
+  dbConfig: {
+    key: number;
+    value: CloudDbConfig;
+    indexes: { 'provider': string; 'updatedAt': Date };
   };
 };
 
@@ -144,6 +158,15 @@ function setupInvestmentsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
     investmentsStore.createIndex('type', 'type');
     investmentsStore.createIndex('isActive', 'isActive');
     investmentsStore.createIndex('maturityDate', 'maturityDate');
+  }
+}
+
+// Store para configuración de BD en la nube (persistida localmente)
+function setupDbConfigStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
+  if (!db.objectStoreNames.contains('dbConfig')) {
+    const configStore = db.createObjectStore('dbConfig', { keyPath: 'id', autoIncrement: true });
+    configStore.createIndex('provider', 'provider');
+    configStore.createIndex('updatedAt', 'updatedAt');
   }
 }
 
@@ -226,6 +249,7 @@ export async function initDB() {
         setupSheetConfigStore(db);
         setupSavingsStore(db);
         setupInvestmentsStore(db);
+        setupDbConfigStore(db);
       },
     });
 
@@ -233,7 +257,7 @@ export async function initDB() {
     const storeNames = Array.from(db.objectStoreNames);
     console.log(`Stores creados: ${storeNames.join(', ')}`);
     
-    if (!storeNames.includes('expenses') || !storeNames.includes('balance') || !storeNames.includes('sheetConfig') || !storeNames.includes('savings') || !storeNames.includes('investments')) {
+    if (!storeNames.includes('expenses') || !storeNames.includes('balance') || !storeNames.includes('sheetConfig') || !storeNames.includes('savings') || !storeNames.includes('investments') || !storeNames.includes('dbConfig')) {
       console.warn('Stores faltantes detectados, intentando reiniciar la base de datos...', storeNames);
       // Intento de recuperación: cerrar, eliminar y recrear la BD
       try {
@@ -249,11 +273,12 @@ export async function initDB() {
           setupSheetConfigStore(db2);
           setupSavingsStore(db2);
           setupInvestmentsStore(db2);
+          setupDbConfigStore(db2);
         },
       });
       const recreatedStores = Array.from(recreated.objectStoreNames);
       console.log('Stores después de recreación:', recreatedStores);
-      if (!recreatedStores.includes('expenses') || !recreatedStores.includes('balance') || !recreatedStores.includes('sheetConfig') || !recreatedStores.includes('savings') || !recreatedStores.includes('investments')) {
+      if (!recreatedStores.includes('expenses') || !recreatedStores.includes('balance') || !recreatedStores.includes('sheetConfig') || !recreatedStores.includes('savings') || !recreatedStores.includes('investments') || !recreatedStores.includes('dbConfig')) {
         console.error('No se pudieron crear todos los stores necesarios tras la recreación. Stores existentes:', recreatedStores);
         throw new Error('Faltan stores en la base de datos tras recreación');
       }

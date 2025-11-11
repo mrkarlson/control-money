@@ -3,6 +3,7 @@ import { IndexedDbRepository } from './indexedDbRepository';
 import { TursoRepository } from './tursoRepository';
 import { initTursoClient, initializeTursoDatabase } from '../tursoConfig';
 import { initDB } from '../config';
+import { getCloudDbConfig, isCloudDbConfigValid } from '../cloudDbConfig';
 
 export class DatabaseRepositoryFactory implements RepositoryFactory {
   async create(config: DatabaseConfig): Promise<DatabaseRepository> {
@@ -54,14 +55,31 @@ export async function createRepositoryFromEnv(): Promise<DatabaseRepository> {
   };
 
   if (dbType === 'turso') {
-    const url = import.meta.env.VITE_TURSO_DATABASE_URL;
-    const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
-    
-    if (!url || !authToken) {
-      console.warn('Turso configuration missing, falling back to local database');
-      config.type = 'local';
-    } else {
-      config.turso = { url, authToken };
+    // Preferir configuración guardada localmente en IndexedDB
+    try {
+      const saved = await getCloudDbConfig();
+      if (isCloudDbConfigValid(saved)) {
+        config.turso = { url: saved!.url, authToken: saved!.authToken };
+      } else {
+        // Fallback a ENV si no hay configuración guardada
+        const url = import.meta.env.VITE_TURSO_DATABASE_URL;
+        const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
+        if (!url || !authToken) {
+          console.warn('Turso configuration missing (no saved config and ENV incomplete), falling back to local database');
+          config.type = 'local';
+        } else {
+          config.turso = { url, authToken };
+        }
+      }
+    } catch (e) {
+      console.warn('Error leyendo CloudDbConfig, usando ENV/Fallback local:', e);
+      const url = import.meta.env.VITE_TURSO_DATABASE_URL;
+      const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
+      if (!url || !authToken) {
+        config.type = 'local';
+      } else {
+        config.turso = { url, authToken };
+      }
     }
   }
 

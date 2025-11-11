@@ -10,6 +10,7 @@ import { getSyncService } from '../db/syncService';
 import { switchRepository, setPreferredDatabaseType } from '../db/repositoryAdapter';
 import { DatabaseType, SyncResult } from '../db/repositories/interfaces';
 import { ENV_CONFIG, validateTursoConfig, logConfig } from '../config/env';
+import { getCloudDbConfig, saveCloudDbConfig, isCloudDbConfigValid } from '../db/cloudDbConfig';
 
 interface DatabaseConfigProps {
   onDatabaseTypeChange?: (type: DatabaseType) => void;
@@ -34,17 +35,40 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
       if (pref === 'local' || pref === 'turso') initialType = pref as DatabaseType;
     }
     setCurrentDbType(initialType);
-    setTursoConfig({
-      url: ENV_CONFIG.TURSO.DATABASE_URL,
-      authToken: ENV_CONFIG.TURSO.AUTH_TOKEN
-    });
     
-    // Log de configuración en desarrollo
-    logConfig();
-    
-    // Verificar conexión inicial
-    checkConnection();
+    // Intentar cargar configuración guardada en IndexedDB primero
+    (async () => {
+      try {
+        const saved = await getCloudDbConfig();
+        if (isCloudDbConfigValid(saved)) {
+          setTursoConfig({ url: saved!.url, authToken: saved!.authToken });
+        } else {
+          setTursoConfig({
+            url: ENV_CONFIG.TURSO.DATABASE_URL,
+            authToken: ENV_CONFIG.TURSO.AUTH_TOKEN
+          });
+        }
+      } catch {
+        setTursoConfig({
+          url: ENV_CONFIG.TURSO.DATABASE_URL,
+          authToken: ENV_CONFIG.TURSO.AUTH_TOKEN
+        });
+      }
+      // Log de configuración en desarrollo
+      logConfig();
+      // Verificar conexión inicial
+      checkConnection();
+    })();
   }, []);
+
+  const handleSaveTursoConfig = async () => {
+    try {
+      const updated = await saveCloudDbConfig({ url: tursoConfig.url, authToken: tursoConfig.authToken });
+      setTursoConfig({ url: updated.url, authToken: updated.authToken });
+    } catch (e) {
+      console.error('Error guardando configuración de Turso en IndexedDB:', e);
+    }
+  };
 
   const checkConnection = async () => {
     try {
@@ -83,15 +107,15 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
       // Crear repositorios para ambas bases de datos
       const localRepo = await factory.create({ type: 'local' });
       
-      if (!validateTursoConfig()) {
+      if (!tursoConfig.url || !tursoConfig.authToken) {
         throw new Error('Configuración de Turso incompleta');
       }
       
       const tursoRepo = await factory.create({ 
         type: 'turso', 
         turso: {
-          url: ENV_CONFIG.TURSO.DATABASE_URL,
-          authToken: ENV_CONFIG.TURSO.AUTH_TOKEN
+          url: tursoConfig.url,
+          authToken: tursoConfig.authToken
         }
       });
       
@@ -187,15 +211,15 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-4">
-            <SettingsIcon className="w-5 h-5 text-gray-600" />
-        <h3 className="text-lg font-semibold text-gray-800">
+            <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
           Configuración de Base de Datos
         </h3>
       </div>
 
       {/* Selector de tipo de base de datos */}
       <div className="space-y-3">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Tipo de Base de Datos
         </label>
         
@@ -204,8 +228,8 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
             onClick={() => handleDatabaseTypeChange('local')}
             className={`p-4 rounded-lg border-2 transition-all duration-200 ${
               currentDbType === 'local'
-                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-100'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-600'
             }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -221,8 +245,8 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
             onClick={() => handleDatabaseTypeChange('turso')}
             className={`p-4 rounded-lg border-2 transition-all duration-200 ${
               currentDbType === 'turso'
-                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-100'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-600'
             }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -237,8 +261,8 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
       </div>
 
       {/* Estado de conexión */}
-      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-        <span className="text-sm font-medium text-gray-700">
+      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
           Estado de conexión:
         </span>
         <ConnectionStatus />
@@ -246,11 +270,11 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
 
       {/* Configuración de Turso */}
       {currentDbType === 'turso' && (
-        <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h4 className="font-medium text-blue-800">Configuración de Turso</h4>
+        <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <h4 className="font-medium text-blue-800 dark:text-blue-200">Configuración de Turso</h4>
           
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-blue-700">
+            <label className="block text-sm font-medium text-blue-700 dark:text-blue-200">
               URL de la Base de Datos
             </label>
             <input
@@ -258,13 +282,12 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
               value={tursoConfig.url}
               onChange={(e) => setTursoConfig(prev => ({ ...prev, url: e.target.value }))}
               placeholder="libsql://your-database.turso.io"
-              className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              readOnly
+              className="w-full px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
             />
           </div>
           
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-blue-700">
+            <label className="block text-sm font-medium text-blue-700 dark:text-blue-200">
               Token de Autenticación
             </label>
             <input
@@ -272,14 +295,21 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
               value={tursoConfig.authToken}
               onChange={(e) => setTursoConfig(prev => ({ ...prev, authToken: e.target.value }))}
               placeholder="eyJ..."
-              className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              readOnly
+              className="w-full px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
             />
           </div>
           
-          <p className="text-xs text-blue-600">
-            Las credenciales se configuran en las variables de entorno (.env.local)
-          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveTursoConfig}
+              className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              Guardar credenciales en el dispositivo
+            </button>
+            <span className="text-xs text-blue-700 dark:text-blue-300">
+              Se guardan de forma local (IndexedDB) y NO se sincronizan.
+            </span>
+          </div>
         </div>
       )}
 
@@ -298,7 +328,7 @@ export const DatabaseConfig: React.FC<DatabaseConfigProps> = ({ onDatabaseTypeCh
           {isSyncing ? 'Sincronizando...' : 'Sincronizar Bases de Datos'}
         </button>
         
-        <p className="text-xs text-gray-600 text-center">
+        <p className="text-xs text-gray-600 dark:text-gray-400 text-center">
           Sincroniza los datos entre la base de datos local y la nube
         </p>
       </div>
