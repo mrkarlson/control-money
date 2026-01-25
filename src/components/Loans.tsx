@@ -94,7 +94,7 @@ export default function Investments() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isMobile = useMediaQuery('(max-width:900px)');
-  const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
+  // const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
   // En inversiones no necesitamos pestaña de vista anual, sólo la lista de inversiones
 
   useEffect(() => {

@@ -56,8 +56,7 @@ export class DatabaseSyncServiceImpl implements DatabaseSyncService {
   // Sincronización direccional explícita: clona los datos del source al target
   async syncWithDirection(
     source: DatabaseRepository,
-    target: DatabaseRepository,
-    direction: SyncStrategy
+    target: DatabaseRepository
   ): Promise<SyncResult> {
     const result: SyncResult = {
       success: false,
