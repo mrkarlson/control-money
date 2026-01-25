@@ -1,146 +1,84 @@
 # Control Money
 
-Aplicación React para gestionar gastos, metas de ahorro e inversiones. Construida con Vite + TypeScript y diseñada con un enfoque responsive: tarjetas en móvil y tablas en escritorio, encabezados visibles y botones de acción flotantes (FAB) para una interacción rápida.
+Aplicación React para gestionar gastos, metas de ahorro e inversiones. Construida con Vite + TypeScript y diseñada con un enfoque responsive.
 
 ## Características principales
 
-- Gastos: alta/edición/eliminación, filtrado por mes y vista adaptada a móvil/desktop.
-- Ahorros: gestión de metas, tarjetas en móvil y FAB para crear nuevas metas.
-- Inversiones: listado y edición de inversiones activas, encabezado de sección con título grande.
-- UI consistente: encabezado visible, soporte dark/light, FAB verde para acciones principales.
-- Selección de base de datos: Local (IndexedDB) o Nube (Turso) con fallback automático.
-- Sincronización manual entre Local y Turso (opcional) mediante servicio de sync.
+- **Gastos:** Gestión completa (alta/baja/modificación), filtrado mensual y vistas adaptadas a móvil/escritorio.
+- **Ahorros:** Gestión de metas de ahorro con seguimiento de progreso.
+- **Inversiones:** Seguimiento de inversiones activas.
+- **Base de Datos Flexible:**
+  - **Local:** Uso de IndexedDB para almacenamiento offline en el navegador.
+  - **Nube:** Integración con Turso (libsql) para sincronización entre dispositivos.
+- **Sincronización:**
+  - Sincronización manual entre base de datos Local y Nube.
+  - Exportación e importación con Google Sheets.
+- **UI Moderna:** Soporte para tema claro/oscuro, diseño responsive y componentes interactivos.
 
 ## Requisitos previos
 
 - Node.js 18+ y npm.
 
-## Desarrollo
+## Instalación y Desarrollo
 
-1) Instalar dependencias:
+1.  **Instalar dependencias:**
 
-```
-npm install
-```
+    ```bash
+    npm install
+    ```
 
-2) Ejecutar en desarrollo (puerto por defecto 5173):
+2.  **Ejecutar en modo desarrollo:**
 
-```
-npm run dev
-```
+    ```bash
+    npm run dev
+    ```
+    La aplicación estará disponible por defecto en `http://localhost:5173`.
 
-Puedes cambiar el puerto con:
+3.  **Construcción para producción:**
 
-```
-npm run dev -- --port 5173
-```
+    ```bash
+    npm run build
+    ```
 
-3) Construcción de producción:
+4.  **Previsualizar build:**
 
-```
-npm run build
-```
+    ```bash
+    npm run preview
+    ```
 
-4) Previsualización del build:
+## Configuración de la Aplicación
 
-```
-npm run preview
-```
+La aplicación permite configurar las conexiones a bases de datos y servicios externos directamente desde la interfaz de usuario, sin necesidad de editar archivos de configuración o variables de entorno.
 
-## Uso de la aplicación (guía rápida)
+### Base de Datos (Local / Turso)
 
-- Navega entre Gastos, Ahorros e Inversiones desde la navegación principal.
-- En móvil verás tarjetas; en escritorio, tablas. Usa el botón flotante (FAB) para crear nuevos registros.
-- El indicador de BD (“BD: Local / Nube (Turso)”) permite cambiar el tipo de almacenamiento en tiempo de ejecución. Al cambiar, la app reconecta y recarga datos.
-- La pantalla de “Configuración de Base de Datos” permite comprobar conexión y ejecutar sincronización manual entre Local y Turso.
+Por defecto, la aplicación utiliza **IndexedDB (Local)**. Para activar la sincronización en la nube:
 
-## Configuración por variables de entorno
+1.  Ve a la sección de **Configuración** (icono de engranaje o menú).
+2.  En el apartado de Base de Datos, selecciona **Nube (Turso)**.
+3.  Introduce la **URL de la base de datos** y el **Token de autenticación** proporcionados por Turso.
+4.  Guarda la configuración. La app validará la conexión y cambiará al modo Nube si es exitosa.
 
-Las variables se leen en tiempo de build/arranque y se exponen mediante `import.meta.env`. La app también respeta una preferencia de usuario guardada en `localStorage` para el tipo de BD.
+Esta configuración se guarda de forma segura en tu navegador (IndexedDB) para futuras sesiones.
 
-Variables disponibles (ver `src/config/env.ts`):
+### Google Sheets
 
-- VITE_DB_TYPE: tipo de base de datos por defecto. Valores: `local` | `turso`. Por defecto: `local`.
-- VITE_SYNC_ENABLED: habilita características de sincronización en la UI. Valores: `true` | `false`. Por defecto: `false`.
-- VITE_TURSO_DATABASE_URL: URL de base de datos Turso (libsql). Ej: `libsql://mi-db-mi-org.turso.io`.
-- VITE_TURSO_AUTH_TOKEN: token de autenticación Turso.
-- VITE_GOOGLE_SHEETS_CLIENT_ID: Client ID de Google Sheets (opcional, si integras exportación/sync con Sheets).
-- VITE_GOOGLE_SHEETS_CLIENT_SECRET: Client Secret de Google Sheets (opcional).
+Para sincronizar tus datos con una hoja de cálculo de Google:
 
-### Ejemplos de .env
+1.  Ve a la sección de **Configuración**.
+2.  En el apartado de Google Sheets, introduce:
+    - **Client ID** y **Client Secret** (de tu proyecto en Google Cloud Console).
+    - **ID de la hoja de cálculo** y **Nombre de la hoja**.
+3.  Haz clic en **Autenticar con Google** para vincular tu cuenta.
+4.  Una vez autenticado, podrás usar los botones de **Exportar** e **Importar** para sincronizar tus gastos.
 
-Ejemplo mínimo (solo local):
+La configuración y los tokens de acceso se almacenan localmente en IndexedDB.
 
-```
-# .env
-VITE_DB_TYPE=local
-VITE_SYNC_ENABLED=false
+## Arquitectura
 
-# Integraciones opcionales
-VITE_GOOGLE_SHEETS_CLIENT_ID=
-VITE_GOOGLE_SHEETS_CLIENT_SECRET=
-```
-
-Ejemplo con Turso:
-
-```
-# .env
-VITE_DB_TYPE=turso
-VITE_SYNC_ENABLED=true
-
-# Turso (libsql)
-VITE_TURSO_DATABASE_URL=libsql://mi-db-mi-org.turso.io
-VITE_TURSO_AUTH_TOKEN=eyJhbGciOi...
-
-# Integraciones opcionales
-VITE_GOOGLE_SHEETS_CLIENT_ID=
-VITE_GOOGLE_SHEETS_CLIENT_SECRET=
-```
-
-Notas importantes:
-
-- Si `VITE_DB_TYPE=turso` pero faltan `VITE_TURSO_DATABASE_URL` o `VITE_TURSO_AUTH_TOKEN`, la app hace fallback automático a `local` (IndexedDB).
-- No compartas tokens reales en el repositorio. Usa `.env.local` y exclúyelo del control de versiones.
-
-## Preferencias en tiempo de ejecución y prioridad
-
-La app determina el tipo de BD activo siguiendo esta prioridad:
-
-1) `localStorage.preferred_db_type` (establecido al cambiar el selector de BD en la UI).
-2) `VITE_DB_TYPE` definido en `.env`.
-
-Si la inicialización de Turso falla (por ejemplo, token inválido o red), la app registra un aviso y cae a `local`. El tipo de BD efectivamente activo se guarda en `localStorage.active_db_type`.
-
-## Sincronización (opcional)
-
-Cuando `VITE_SYNC_ENABLED=true`, puedes usar la UI de “Configuración de Base de Datos” para ejecutar sincronización manual:
-
-- Local → Turso si la BD seleccionada es `local`.
-- Turso → Local si la BD seleccionada es `turso`.
-
-La sincronización utiliza `src/db/syncService.ts` y compara metadatos básicos para decidir la dirección o reportar conflictos.
-
-## Seguridad y credenciales
-
-- En desarrollo, puedes definir la URL y el token de Turso en `.env`. En producción, se recomienda que el usuario final introduzca sus credenciales y que se almacenen cifradas en IndexedDB.
-- No incluyas credenciales sensibles en el repositorio ni en builds públicos.
-
-## Comandos útiles
-
-- `npm run dev` — arranca el servidor de desarrollo (por defecto en 5173).
-- `npm run dev -- --port 5173` — arranca el dev server en un puerto concreto.
-- `npm run build` — genera el build de producción en `dist/`.
-- `npm run preview` — sirve el build de producción localmente.
-
-## Arquitectura de datos (resumen)
-
-- Repositorios y fábrica: `src/db/repositories/repositoryFactory.ts` selecciona `IndexedDbRepository` o `TursoRepository` según configuración.
-- Adaptador en runtime: `src/db/repositoryAdapter.ts` expone servicios (gastos, ahorros, inversiones) que delegan en el repositorio activo.
-- Config de entorno: `src/config/env.ts` centraliza lectura de variables y validaciones básicas.
-- Indicadores/Configuración en UI: `src/components/DatabaseIndicator.tsx` y `src/components/DatabaseConfig.tsx`.
-
-## FAQ
-
-- ¿Puedo usar la app sin Turso? Sí. Por defecto funciona con IndexedDB local.
-- ¿Qué puerto usa en desarrollo? Vite usa 5173 por defecto; puedes cambiarlo con `--port`.
-- ¿Cómo cambio entre Local y Turso? Usa el selector en el indicador de BD dentro de la app; la preferencia se guarda y se respeta al reiniciar.
+- **Frontend:** React + Vite + TypeScript.
+- **Estilos:** Tailwind CSS + Material UI.
+- **Almacenamiento:**
+  - **Local:** IndexedDB (vía `idb`).
+  - **Remoto:** Turso (vía `@libsql/client`).
+- **Patrón de Repositorio:** La aplicación utiliza un adaptador que permite cambiar dinámicamente entre almacenamiento local y remoto sin afectar a la lógica de negocio.
