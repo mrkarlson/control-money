@@ -28,7 +28,12 @@ import { format, eachMonthOfInterval, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Expense } from '../db/config';
 // Usar adaptador de repositorio para respetar la BD activa
-import { getExpensesByMonth, deleteExpense, getCurrentBalance, updateExpense } from '../db';
+import { getExpensesByMonth, deleteExpense, updateExpense } from '../db';
+import { useBalance, ensureBalanceLoaded, adjustBalance } from '../hooks/useBalanceStore';
+import { calculateBalances } from '../utils/balances';
+import { formatCurrency } from '../utils/formatters';
+import { shouldAskBalanceOnPayment } from '../utils/paymentPreference';
+import ConfirmBalanceDialog from './ConfirmBalanceDialog';
 
 interface ExpenseListProps {
   currentMonth: Date;
@@ -37,42 +42,16 @@ interface ExpenseListProps {
   onMonthChange: (month: Date) => void;
 }
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR'
-  }).format(amount);
-};
-
 export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDeleted, onMonthChange }: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'description', direction: 'asc' });
-  const [balance, setBalance] = useState<{ amount: number; monthlyIncome: number } | null>(null);
+  const balance = useBalance();
+  const [editingAmount, setEditingAmount] = useState<{ id: number; value: string } | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<{ expense: Expense; amount: number } | null>(null);
   const isMobile = useMediaQuery('(max-width:900px)');
   const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
-
-  const calculateBalances = (currentBalance: { amount: number; monthlyIncome: number } | null) => {
-    if (!currentBalance) return { realBalance: 0, projectedBalance: 0 };
-
-    const pendingExpenses = expenses.reduce((sum, expense) => {
-      const currentMonthPayment = expense.paymentHistory?.find(record => 
-        isSameMonth(new Date(record.date), currentMonth)
-      );
-      return !currentMonthPayment?.isPaid ? sum + expense.amount : sum;
-    }, 0);
-
-    const totalMonthExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-    // Balance Real = Balance Actual - Gastos Pendientes del mes actual
-    const realBalance = currentBalance.amount - (isSameMonth(currentMonth, new Date()) ? pendingExpenses : 0);
-    
-    // Balance Proyectado = Ingresos Mensuales - Total Gastos del mes
-    const projectedBalance = isSameMonth(currentMonth, new Date()) ? realBalance : currentBalance.monthlyIncome - totalMonthExpenses;
-
-    return { realBalance, projectedBalance };
-  };
 
   const filtered = formatCurrency(
     expenses
@@ -85,15 +64,6 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
       .reduce((sum, expense) => sum + expense.amount, 0)
   );
 
-  const loadBalance = useCallback(async () => {
-    try {
-      const currentBalance = await getCurrentBalance();
-      setBalance(currentBalance);
-    } catch (error) {
-      console.error('Error loading balance:', error);
-    }
-  }, []);
-
   const loadExpenses = useCallback(async () => {
     try {
       const monthExpenses = await getExpensesByMonth(currentMonth);
@@ -103,15 +73,47 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
     }
   }, [currentMonth]);
 
-  // Recargar datos cuando cambia el tipo de BD (evento global)
+  // Cargar el balance compartido y recargar datos al cambiar de BD
   useEffect(() => {
+    ensureBalanceLoaded();
     const handler = () => {
       loadExpenses();
-      loadBalance();
     };
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
-  }, [loadExpenses, loadBalance]);
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
+  }, [loadExpenses]);
+
+  const saveInlineAmount = async (expense: Expense, raw: string) => {
+    if (!expense.id) return;
+    const normalized = raw.replace(/\s/g, '').replace(',', '.');
+    const newAmount = Number(normalized);
+    if (!Number.isFinite(newAmount) || newAmount === expense.amount) return;
+
+    try {
+      const updatedPaymentHistory = [...(expense.paymentHistory || [])];
+      const index = updatedPaymentHistory.findIndex(record =>
+        isSameMonth(new Date(record.date), currentMonth)
+      );
+
+      if (index >= 0) {
+        updatedPaymentHistory[index] = {
+          ...updatedPaymentHistory[index],
+          amount: newAmount
+        };
+      } else {
+        updatedPaymentHistory.push({
+          date: currentMonth,
+          isPaid: false,
+          amount: newAmount
+        });
+      }
+
+      await updateExpense({ ...expense, amount: newAmount, paymentHistory: updatedPaymentHistory });
+      await loadExpenses();
+    } catch (error) {
+      console.error('Error updating expense amount:', error);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
@@ -140,43 +142,53 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
 
   const handlePaymentToggle = async (expense: Expense) => {
     if (!expense.id) return;
-  
-    try {
-      // Find if there's an existing payment record for the current month
-      const existingPaymentForMonth = expense.paymentHistory?.find(record => 
+
+    // Find if there's an existing payment record for the current month
+    const existingPaymentForMonth = expense.paymentHistory?.find(record =>
+      isSameMonth(new Date(record.date), currentMonth)
+    );
+
+    // Create updated payment history
+    const updatedPaymentHistory = [...(expense.paymentHistory || [])];
+
+    const newPaymentStatus = existingPaymentForMonth ? !existingPaymentForMonth.isPaid : true;
+
+    if (existingPaymentForMonth) {
+      // Update existing payment record for this month
+      const index = updatedPaymentHistory.findIndex(record =>
         isSameMonth(new Date(record.date), currentMonth)
       );
-  
-      // Create updated payment history
-      const updatedPaymentHistory = [...(expense.paymentHistory || [])];
-      
-      const newPaymentStatus = existingPaymentForMonth ? !existingPaymentForMonth.isPaid : true;
-      
-      if (existingPaymentForMonth) {
-        // Update existing payment record for this month
-        const index = updatedPaymentHistory.findIndex(record => 
-          isSameMonth(new Date(record.date), currentMonth)
-        );
-        updatedPaymentHistory[index] = {
-          date: currentMonth,
-          isPaid: newPaymentStatus,
-          amount: existingPaymentForMonth.amount || expense.amount
-        };
-      } else {
-        // Add new payment record for this month
-        updatedPaymentHistory.push({
-          date: currentMonth,
-          isPaid: newPaymentStatus,
-          amount: expense.amount
-        });
-      }
-  
-      // Solo actualizar el flag global isPaid en gastos de una sola vez.
-      const updatedExpense = {
-        ...expense,
-        isPaid: expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
-        paymentHistory: updatedPaymentHistory
+      updatedPaymentHistory[index] = {
+        date: currentMonth,
+        isPaid: newPaymentStatus,
+        amount: existingPaymentForMonth.amount || expense.amount
       };
+    } else {
+      // Add new payment record for this month
+      updatedPaymentHistory.push({
+        date: currentMonth,
+        isPaid: newPaymentStatus,
+        amount: expense.amount
+      });
+    }
+
+    // Solo actualizar el flag global isPaid en gastos de una sola vez.
+    const updatedExpense = {
+      ...expense,
+      isPaid: expense.frequency === 'one-time' ? newPaymentStatus : expense.isPaid,
+      paymentHistory: updatedPaymentHistory
+    };
+
+    // Abrir el modal inmediatamente (sin esperar al guardado) para evitar el lag.
+    const justPaid = newPaymentStatus && !existingPaymentForMonth?.isPaid;
+    if (justPaid && isSameMonth(currentMonth, new Date()) && shouldAskBalanceOnPayment()) {
+      const currentMonthRecord = updatedPaymentHistory.find(record =>
+        isSameMonth(new Date(record.date), currentMonth)
+      );
+      setPendingPayment({ expense, amount: currentMonthRecord?.amount ?? expense.amount });
+    }
+
+    try {
       await updateExpense(updatedExpense);
       await loadExpenses();
     } catch (error) {
@@ -184,24 +196,29 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
     }
   };
 
+  const adjustBalanceForPayment = async (amount: number) => {
+    try {
+      // Ajusta el balance compartido (resta el importe pagado).
+      await adjustBalance(-amount);
+    } catch (error) {
+      console.error('Error actualizando el balance tras el pago:', error);
+    }
+  };
+
 
 
   useEffect(() => {
-    const updateData = async () => {
-      await loadExpenses();
-      await loadBalance();
-    };
-    updateData();
+    loadExpenses();
 
     const handleExpenseChange = () => {
-      updateData();
+      loadExpenses();
     };
 
     document.addEventListener('expenseAdded', handleExpenseChange);
     return () => {
       document.removeEventListener('expenseAdded', handleExpenseChange);
     };
-  }, [currentMonth, loadExpenses, loadBalance]);
+  }, [currentMonth, loadExpenses]);
 
   return (
     <Box sx={{ mt: 2 }} data-testid="expense-list">
@@ -307,7 +324,7 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
           }, 0);
           const pendingMonth = totalMonth - paidMonth;
 
-          const balances = balance ? calculateBalances(balance) : { realBalance: 0, projectedBalance: 0 };
+          const balances = calculateBalances(balance, totalMonth, paidMonth, currentMonth);
 
           return (
             <Box>
@@ -495,11 +512,21 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
                       />
                     </Box>
                   </CardContent>
-                  <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
-                    <IconButton size="small" onClick={() => expense.id && onEditExpense(expense)}>
+                  <CardActions sx={{ justifyContent: 'flex-end', pt: 0, pb: 2, px: 2 }}>
+                    <IconButton
+                      size="small"
+                      aria-label="Editar gasto"
+                      onClick={() => expense.id && onEditExpense(expense)}
+                      sx={{ p: 1.25 }}
+                    >
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => expense.id && handleDelete(expense.id!)}>
+                    <IconButton
+                      size="small"
+                      aria-label="Eliminar gasto"
+                      onClick={() => expense.id && handleDelete(expense.id!)}
+                      sx={{ p: 1.25 }}
+                    >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </CardActions>
@@ -704,67 +731,48 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
                   <TableRow key={expense.id}>
                     <TableCell>{expense.description}</TableCell>
                     <TableCell align="right">
-                      <Box
-                        onClick={(e) => {
-                          const input = document.createElement('input');
-                          input.type = 'number';
-                          input.value = expense.amount.toString();
-                          input.style.width = '100px';
-                          input.style.padding = '4px';
-                          input.style.border = '1px solid #ccc';
-                          input.style.borderRadius = '4px';
-                          
-                          const cell = e.currentTarget;
-                          cell.innerHTML = '';
-                          cell.appendChild(input);
-                          input.focus();
-                          
-                          const handleBlur = async () => {
-                            const newAmount = parseFloat(input.value);
-                            if (!isNaN(newAmount) && expense.id) {
-                              try {
-                                const updatedExpense = { ...expense, amount: newAmount };
-                                const updatedPaymentHistory = [...(expense.paymentHistory || [])];
-                                const index = updatedPaymentHistory.findIndex(record => 
-                                  isSameMonth(new Date(record.date), currentMonth)
-                                );
-                                
-                                if (index >= 0) {
-                                  updatedPaymentHistory[index] = {
-                                    ...updatedPaymentHistory[index],
-                                    amount: newAmount
-                                  };
-                                } else {
-                                  updatedPaymentHistory.push({
-                                    date: currentMonth,
-                                    isPaid: false,
-                                    amount: newAmount
-                                  });
-                                }
-                                
-                                updatedExpense.paymentHistory = updatedPaymentHistory;
-                                await updateExpense(updatedExpense);
-                                await loadExpenses();
-                                cell.innerHTML = formatCurrency(newAmount);
-                              } catch (error) {
-                                console.error('Error updating expense amount:', error);
-                                cell.innerHTML = formatCurrency(expense.amount);
-                              }
-                            } else {
-                              cell.innerHTML = formatCurrency(expense.amount);
-                            }
-                          };
-                          
-                          input.addEventListener('blur', handleBlur);
-                          input.addEventListener('keypress', (e) => {
+                      {editingAmount && editingAmount.id === expense.id ? (
+                        <TextField
+                          autoFocus
+                          variant="outlined"
+                          size="small"
+                          inputMode="decimal"
+                          value={editingAmount.value}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (!/^-?\d*[.,]?\d*$/.test(raw)) return;
+                            setEditingAmount({ id: expense.id!, value: raw });
+                          }}
+                          onBlur={(e) => {
+                            const raw = e.target.value;
+                            setEditingAmount(null);
+                            saveInlineAmount(expense, raw);
+                          }}
+                          onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              input.blur();
+                              (e.target as HTMLInputElement).blur();
+                            } else if (e.key === 'Escape') {
+                              setEditingAmount(null);
                             }
-                          });
-                        }}
-                      >
-                        {formatCurrency(expense.amount)}
-                      </Box>
+                          }}
+                          sx={{ width: 120 }}
+                        />
+                      ) : (
+                        <Box
+                          onClick={() => expense.id && setEditingAmount({ id: expense.id, value: String(expense.amount) })}
+                          title="Clic para editar la cantidad"
+                          sx={{
+                            display: 'inline-block',
+                            px: 1,
+                            py: 0.5,
+                            borderRadius: 1,
+                            cursor: 'pointer',
+                            '&:hover': { backgroundColor: 'action.hover' }
+                          }}
+                        >
+                          {formatCurrency(expense.amount)}
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell>{expense.category}</TableCell>
                     <TableCell>{format(new Date(expense.date), 'dd/MM/yyyy')}</TableCell>
@@ -822,6 +830,19 @@ export default function ExpenseList({ currentMonth, onEditExpense, onExpenseDele
         </Table>
       </TableContainer>
       )}
+
+      <ConfirmBalanceDialog
+        open={pendingPayment !== null}
+        amount={pendingPayment?.amount ?? 0}
+        expenseName={pendingPayment?.expense.description ?? ''}
+        currentAmount={balance?.amount ?? 0}
+        onConfirm={() => {
+          if (pendingPayment) adjustBalanceForPayment(pendingPayment.amount);
+          setPendingPayment(null);
+        }}
+        onSkip={() => setPendingPayment(null)}
+        onDismiss={() => setPendingPayment(null)}
+      />
     </Box>
   );
 }

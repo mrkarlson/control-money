@@ -1,4 +1,4 @@
-import { Investment, getDB } from './config';
+import { Investment, InvestmentContribution, getDB } from './config';
 
 // Calcular el interés compuesto
 export function calculateCompoundInterest(
@@ -141,4 +141,44 @@ export async function updateAllInvestmentValues() {
   }
   
   return updatedInvestments;
+}
+
+// --- Aportaciones de inversión ---
+
+export async function addInvestmentContribution(contribution: Omit<InvestmentContribution, 'id'>) {
+  const db = await getDB();
+  return await db.add('investmentContributions', contribution);
+}
+
+export async function updateInvestmentContribution(contribution: InvestmentContribution) {
+  const db = await getDB();
+  return await db.put('investmentContributions', contribution);
+}
+
+export async function deleteInvestmentContribution(id: number) {
+  const db = await getDB();
+  return await db.delete('investmentContributions', id);
+}
+
+export async function getContributionsByInvestment(investmentId: number): Promise<InvestmentContribution[]> {
+  const db = await getDB();
+  const contributions = await db.getAllFromIndex('investmentContributions', 'investmentId', investmentId);
+  return contributions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+export async function getAllInvestmentContributions(): Promise<InvestmentContribution[]> {
+  const db = await getDB();
+  const contributions = await db.getAll('investmentContributions');
+  return contributions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+/**
+ * Capital total aportado a una inversión: capital inicial + aportaciones.
+ * (No confundir con `currentAmount`, que es el valor de mercado actual.)
+ */
+export function calculateContributedCapital(
+  investment: Pick<Investment, 'initialAmount'>,
+  contributions: InvestmentContribution[]
+): number {
+  return investment.initialAmount + contributions.reduce((sum, c) => sum + c.amount, 0);
 }

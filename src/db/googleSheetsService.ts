@@ -17,10 +17,10 @@ export async function getGoogleSheetsConfig(): Promise<GoogleSheetsConfig | unde
 export async function saveGoogleSheetsConfig(config: GoogleSheetsConfig): Promise<void> {
   // Si existe una configuración previa, actualizamos; de lo contrario, creamos
   const existing = await getGoogleSheetsConfig();
-  if (existing && typeof (existing as any).id === 'number') {
-    await updateConfigInRepo({ ...(existing as any), ...config });
+  if (existing && typeof existing.id === 'number') {
+    await updateConfigInRepo({ ...existing, ...config, id: existing.id });
   } else {
-    const { id, ...rest } = (config as any);
+    const { id: _id, ...rest } = config;
     await createConfigInRepo(rest);
   }
 }

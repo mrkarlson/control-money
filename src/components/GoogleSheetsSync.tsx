@@ -26,16 +26,15 @@ export default function GoogleSheetsSync() {
   useEffect(() => {
     loadLastSyncInfo();
     const handler = () => loadLastSyncInfo();
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
   }, []);
 
   const loadLastSyncInfo = async () => {
     try {
-      const config = await getGoogleSheetsConfig();
-      // @ts-ignore
+      const configs = await getGoogleSheetsConfig();
+      const config = configs[0];
       if (config?.lastSync) {
-        // @ts-ignore
         setLastSync(new Date(config.lastSync));
       }
     } catch (error) {

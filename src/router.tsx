@@ -1,10 +1,25 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 import App from './App';
-import GoogleSheetsConfig from './components/GoogleSheetsConfig';
-import Expenses from './components/Expenses';
-import Loans from './components/Loans';
-import Savings from './components/Savings';
-import OAuth2Callback from './components/OAuth2Callback';
+
+const Expenses = lazy(() => import('./components/Expenses'));
+const Loans = lazy(() => import('./components/Loans'));
+const Savings = lazy(() => import('./components/Savings'));
+const GoogleSheetsConfig = lazy(() => import('./components/GoogleSheetsConfig'));
+const OAuth2Callback = lazy(() => import('./components/OAuth2Callback'));
+
+const withSuspense = (element: React.ReactNode) => (
+  <Suspense
+    fallback={
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+        <CircularProgress />
+      </Box>
+    }
+  >
+    {element}
+  </Suspense>
+);
 
 export const router = createBrowserRouter([
   {
@@ -17,24 +32,24 @@ export const router = createBrowserRouter([
       },
       {
         path: 'expenses',
-        element: <Expenses />
+        element: withSuspense(<Expenses />)
       },
       {
         path: 'investments',
-        element: <Loans />
+        element: withSuspense(<Loans />)
       },
       {
         path: 'savings',
-        element: <Savings />
+        element: withSuspense(<Savings />)
       },
       {
         path: 'configuration',
-        element: <GoogleSheetsConfig />
+        element: withSuspense(<GoogleSheetsConfig />)
       }
     ]
   },
   {
     path: '/oauth-callback',
-    element: <OAuth2Callback />
+    element: withSuspense(<OAuth2Callback />)
   }
 ]);

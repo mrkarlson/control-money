@@ -18,7 +18,6 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import CloudIcon from '@mui/icons-material/Cloud';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useNavigate } from 'react-router-dom';
-import DatabaseIndicator from './DatabaseIndicator';
 import BalanceForm from './BalanceForm';
 
 interface MoreMenuSheetProps {
@@ -97,8 +96,6 @@ const MoreMenuSheet: React.FC<MoreMenuSheetProps> = ({ open, onClose, currentThe
             />
           )}
         </Box>
-
-        <DatabaseIndicator />
 
         <Divider sx={{ my: 2 }} />
 

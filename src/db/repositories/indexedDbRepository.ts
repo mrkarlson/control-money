@@ -4,6 +4,7 @@ import {
   BalanceRepository, 
   SavingsRepository, 
   InvestmentRepository, 
+  InvestmentContributionRepository,
   GoogleSheetsRepository,
   DatabaseOperations 
 } from './interfaces';
@@ -12,6 +13,7 @@ import {
   Balance, 
   SavingsGoal, 
   Investment, 
+  InvestmentContribution, 
   GoogleSheetsConfig, 
   getDB 
 } from '../config';
@@ -47,7 +49,12 @@ import {
   getActiveInvestments,
   getInvestmentsByType,
   updateInvestmentCurrentValue,
-  updateAllInvestmentValues
+  updateAllInvestmentValues,
+  addInvestmentContribution,
+  updateInvestmentContribution,
+  deleteInvestmentContribution,
+  getContributionsByInvestment,
+  getAllInvestmentContributions
 } from '../investmentServices';
 
 class IndexedDbExpenseRepository implements ExpenseRepository {
@@ -239,6 +246,35 @@ class IndexedDbInvestmentRepository implements InvestmentRepository {
   }
 }
 
+class IndexedDbInvestmentContributionRepository implements InvestmentContributionRepository {
+  async create(contribution: Omit<InvestmentContribution, 'id'>): Promise<InvestmentContribution> {
+    const id = await addInvestmentContribution(contribution);
+    return { ...contribution, id } as InvestmentContribution;
+  }
+
+  async update(contribution: InvestmentContribution): Promise<InvestmentContribution> {
+    await updateInvestmentContribution(contribution);
+    return contribution;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      await deleteInvestmentContribution(id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async findAll(): Promise<InvestmentContribution[]> {
+    return await getAllInvestmentContributions();
+  }
+
+  async findByInvestment(investmentId: number): Promise<InvestmentContribution[]> {
+    return await getContributionsByInvestment(investmentId);
+  }
+}
+
 class IndexedDbGoogleSheetsRepository implements GoogleSheetsRepository {
   async create(config: Omit<GoogleSheetsConfig, 'id'>): Promise<GoogleSheetsConfig> {
     const db = await getDB();
@@ -293,11 +329,11 @@ class IndexedDbGoogleSheetsRepository implements GoogleSheetsRepository {
 }
 
 class IndexedDbDatabaseOperations implements DatabaseOperations {
-  async exportData(): Promise<Record<string, any[]>> {
+  async exportData(): Promise<Record<string, unknown[]>> {
     return await exportDatabase();
   }
 
-  async importData(data: Record<string, any[]>): Promise<void> {
+  async importData(data: Record<string, unknown[]>): Promise<void> {
     await importDatabase(data);
   }
 
@@ -305,6 +341,7 @@ class IndexedDbDatabaseOperations implements DatabaseOperations {
     await clearStore('expenses');
     await clearStore('balance');
     await clearStore('savings');
+    await clearStore('investmentContributions');
     await clearStore('investments');
     await clearStore('sheetConfig');
   }
@@ -335,6 +372,7 @@ export class IndexedDbRepository implements DatabaseRepository {
   public balance: BalanceRepository;
   public savings: SavingsRepository;
   public investments: InvestmentRepository;
+  public investmentContributions: InvestmentContributionRepository;
   public googleSheets: GoogleSheetsRepository;
   public operations: DatabaseOperations;
 
@@ -343,15 +381,16 @@ export class IndexedDbRepository implements DatabaseRepository {
     this.balance = new IndexedDbBalanceRepository();
     this.savings = new IndexedDbSavingsRepository();
     this.investments = new IndexedDbInvestmentRepository();
+    this.investmentContributions = new IndexedDbInvestmentContributionRepository();
     this.googleSheets = new IndexedDbGoogleSheetsRepository();
     this.operations = new IndexedDbDatabaseOperations();
   }
 
-  async exportData(): Promise<Record<string, any[]>> {
+  async exportData(): Promise<Record<string, unknown[]>> {
     return this.operations.exportData();
   }
 
-  async importData(data: Record<string, any[]>): Promise<void> {
+  async importData(data: Record<string, unknown[]>): Promise<void> {
     return this.operations.importData(data);
   }
 

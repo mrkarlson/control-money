@@ -1,10 +1,10 @@
-import { Expense, Balance, getDB, ExpenseDB } from './config';
+import { Expense, Balance, SavingsGoal, Investment, InvestmentContribution, GoogleSheetsConfig, PaymentRecord, getDB, ExpenseDB } from './config';
 import { startOfMonth, endOfMonth, addMonths } from 'date-fns';
 
 // Funciones para exportar e importar la base de datos
 export async function exportDatabase() {
   const db = await getDB();
-  const data: Record<string, any[]> = {};
+  const data: Record<string, unknown[]> = {};
 
   // Exportar datos de cada store
   if (db.objectStoreNames.contains('expenses')) {
@@ -23,6 +23,10 @@ export async function exportDatabase() {
     data.investments = await db.getAll('investments');
   }
 
+  if (db.objectStoreNames.contains('investmentContributions')) {
+    data.investmentContributions = await db.getAll('investmentContributions');
+  }
+
   if (db.objectStoreNames.contains('sheetConfig')) {
     data.sheetConfig = await db.getAll('sheetConfig');
   }
@@ -30,7 +34,7 @@ export async function exportDatabase() {
   return data;
 }
 
-export async function importDatabase(data: Record<string, any[]>) {
+export async function importDatabase(data: Record<string, unknown[]>) {
   const db = await getDB();
   
   // Importar datos a cada store
@@ -42,7 +46,7 @@ export async function importDatabase(data: Record<string, any[]>) {
     await store.clear();
     
     // Importar datos
-    for (const expense of data.expenses) {
+    for (const expense of data.expenses as Expense[]) {
       // Normalizar campos de fecha para asegurar que sean objetos Date
       const normalized = {
         ...expense,
@@ -51,7 +55,7 @@ export async function importDatabase(data: Record<string, any[]>) {
           ? (expense.nextPaymentDate instanceof Date ? expense.nextPaymentDate : new Date(expense.nextPaymentDate))
           : undefined,
         paymentHistory: Array.isArray(expense?.paymentHistory)
-          ? expense.paymentHistory.map((record: any) => ({
+          ? expense.paymentHistory.map(record => ({
               ...record,
               date: record?.date instanceof Date ? record.date : new Date(record?.date)
             }))
@@ -69,7 +73,7 @@ export async function importDatabase(data: Record<string, any[]>) {
     
     await store.clear();
     
-    for (const balance of data.balance) {
+    for (const balance of data.balance as Balance[]) {
       const normalized = {
         ...balance,
         date: balance?.date instanceof Date ? balance.date : new Date(balance?.date)
@@ -86,7 +90,7 @@ export async function importDatabase(data: Record<string, any[]>) {
     
     await store.clear();
     
-    for (const goal of data.savings) {
+    for (const goal of data.savings as SavingsGoal[]) {
       const normalized = {
         ...goal,
         startDate: goal?.startDate instanceof Date ? goal.startDate : new Date(goal?.startDate),
@@ -105,7 +109,7 @@ export async function importDatabase(data: Record<string, any[]>) {
     
     await store.clear();
     
-    for (const inv of data.investments) {
+    for (const inv of data.investments as Investment[]) {
       const normalized = {
         ...inv,
         startDate: inv?.startDate instanceof Date ? inv.startDate : new Date(inv?.startDate),
@@ -118,13 +122,30 @@ export async function importDatabase(data: Record<string, any[]>) {
     await tx.done;
   }
   
+  if (data.investmentContributions && db.objectStoreNames.contains('investmentContributions')) {
+    const tx = db.transaction('investmentContributions', 'readwrite');
+    const store = tx.objectStore('investmentContributions');
+
+    await store.clear();
+
+    for (const contribution of data.investmentContributions as InvestmentContribution[]) {
+      const normalized = {
+        ...contribution,
+        date: contribution?.date instanceof Date ? contribution.date : new Date(contribution?.date)
+      };
+      await store.add(normalized);
+    }
+
+    await tx.done;
+  }
+
   if (data.sheetConfig && db.objectStoreNames.contains('sheetConfig')) {
     const tx = db.transaction('sheetConfig', 'readwrite');
     const store = tx.objectStore('sheetConfig');
     
     await store.clear();
     
-    for (const config of data.sheetConfig) {
+    for (const config of data.sheetConfig as GoogleSheetsConfig[]) {
       const normalized = {
         ...config,
         tokenExpiry: config?.tokenExpiry instanceof Date ? config.tokenExpiry : new Date(config?.tokenExpiry),
@@ -221,7 +242,7 @@ export async function getExpensesByMonth(date: Date) {
       const recurringExpense: Expense = { ...expense };
 
       // Check payment history for this specific month
-      const paymentRecord = expense.paymentHistory?.find((record: any) => {
+      const paymentRecord = expense.paymentHistory?.find((record: PaymentRecord) => {
         const recordDate = new Date(record.date);
         return recordDate.getMonth() === targetMonth && recordDate.getFullYear() === targetYear;
       });
@@ -247,12 +268,33 @@ export async function getAllExpenses() {
 }
 
 // Balance Services
+//
+// El balance global es un registro único. Para evitar desajustes si existen
+// filas duplicadas (por versiones anteriores), siempre trabajamos sobre el
+// registro con id más bajo como "canónico" y eliminamos el resto.
+async function getCanonicalBalanceId(db: Awaited<ReturnType<typeof getDB>>): Promise<number | undefined> {
+  const balances = await db.getAll('balance');
+  if (balances.length === 0) return undefined;
+
+  const sorted = [...balances].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  const canonical = sorted[0];
+
+  // Limpiar duplicados antiguos para dejar un único balance
+  for (const extra of sorted.slice(1)) {
+    if (extra.id !== undefined) {
+      await db.delete('balance', extra.id);
+    }
+  }
+
+  return canonical.id;
+}
+
 export async function updateBalance(balance: Omit<Balance, 'id'>) {
   const db = await getDB();
-  const currentBalance = await db.getAll('balance');
-  
-  if (currentBalance.length > 0) {
-    return db.put('balance', { ...balance, id: currentBalance[0].id });
+  const existingId = await getCanonicalBalanceId(db);
+
+  if (existingId !== undefined) {
+    return db.put('balance', { ...balance, id: existingId });
   } else {
     return db.add('balance', balance);
   }
@@ -261,7 +303,20 @@ export async function updateBalance(balance: Omit<Balance, 'id'>) {
 export async function getCurrentBalance() {
   const db = await getDB();
   const balances = await db.getAll('balance');
-  return balances[0] || null;
+  if (balances.length === 0) return null;
+
+  const sorted = [...balances].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+
+  // Sanear duplicados heredados de versiones anteriores.
+  if (sorted.length > 1) {
+    for (const extra of sorted.slice(1)) {
+      if (extra.id !== undefined) {
+        await db.delete('balance', extra.id);
+      }
+    }
+  }
+
+  return sorted[0] || null;
 }
 
 // Utility functions

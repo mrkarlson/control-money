@@ -66,8 +66,8 @@ export default function SavingsList() {
   useEffect(() => {
     loadGoals();
     const handler = () => loadGoals();
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
   }, []);
 
   const loadGoals = async () => {
@@ -117,7 +117,7 @@ export default function SavingsList() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let updatedFormData = { ...formData };
+      const updatedFormData = { ...formData };
 
       if (formData.calculateByDate && formData.targetDate) {
         // Calcular aporte mensual basado en fecha objetivo
@@ -139,8 +139,17 @@ export default function SavingsList() {
         updatedFormData.targetDate = estimatedDate;
       }
 
-      // Remover el campo calculateByDate antes de guardar
-      const { calculateByDate, ...goalData } = updatedFormData;
+      // Construir los datos sin el campo calculateByDate (solo de UI) antes de guardar
+      const goalData = {
+        name: updatedFormData.name,
+        description: updatedFormData.description,
+        targetAmount: updatedFormData.targetAmount,
+        currentAmount: updatedFormData.currentAmount,
+        monthlyContribution: updatedFormData.monthlyContribution,
+        startDate: updatedFormData.startDate,
+        targetDate: updatedFormData.targetDate,
+        completed: updatedFormData.completed,
+      };
 
       if (selectedGoal?.id) {
         await updateSavingsGoal({ ...goalData, id: selectedGoal.id });
@@ -224,11 +233,11 @@ export default function SavingsList() {
                   <Typography variant="caption">Objetivo: <DateDisplay date={goal.targetDate} /></Typography>
                 </Box>
               </CardContent>
-              <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
-                <IconButton size="small" onClick={() => handleOpenDialog(goal)}>
+              <CardActions sx={{ justifyContent: 'flex-end', pt: 0, pb: 2, px: 2 }}>
+                <IconButton size="small" aria-label="Editar objetivo" onClick={() => handleOpenDialog(goal)} sx={{ p: 1.25 }}>
                   <EditIcon />
                 </IconButton>
-                <IconButton size="small" onClick={() => goal.id && handleDelete(goal.id)}>
+                <IconButton size="small" aria-label="Eliminar objetivo" onClick={() => goal.id && handleDelete(goal.id)} sx={{ p: 1.25 }}>
                   <DeleteIcon />
                 </IconButton>
               </CardActions>

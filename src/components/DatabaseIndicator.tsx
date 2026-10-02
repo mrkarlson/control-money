@@ -9,7 +9,9 @@ export default function DatabaseIndicator() {
     try {
       const preferred = localStorage.getItem('preferred_db_type') as DbType | null;
       if (preferred === 'local' || preferred === 'turso') return preferred;
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     const envType = (import.meta.env.VITE_DB_TYPE || 'local') as DbType;
     return envType;
   });
@@ -21,13 +23,16 @@ export default function DatabaseIndicator() {
     try {
       const active = localStorage.getItem('active_db_type') as DbType | null;
       if (active === 'local' || active === 'turso') return active;
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     return dbType;
   });
 
   useEffect(() => {
-    const handler = (e: any) => {
-      const t = e?.detail?.type as DbType | undefined;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ type?: DbType }>).detail;
+      const t = detail?.type;
       if (t === 'local' || t === 'turso') {
         setDbType(t);
         // Mostrar loader mientras cambia desde otro lugar de la app
@@ -43,17 +48,18 @@ export default function DatabaseIndicator() {
             setIsSwitching(true);
             checkConnection().finally(() => setIsSwitching(false));
           }
-        } catch {}
+        } catch {
+          /* ignore */
+        }
       }
     };
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
   }, []);
 
   useEffect(() => {
     // Chequeo inicial de conexión
     checkConnection();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkConnection = async () => {
@@ -67,8 +73,10 @@ export default function DatabaseIndicator() {
       try {
         const active = localStorage.getItem('active_db_type') as DbType | null;
         if (active === 'local' || active === 'turso') setActiveType(active);
-      } catch {}
-    } catch (e) {
+      } catch {
+        /* ignore */
+      }
+    } catch {
       setIsConnected(false);
     } finally {
       setIsChecking(false);

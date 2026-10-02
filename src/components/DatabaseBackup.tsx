@@ -120,7 +120,7 @@ export default function DatabaseBackup() {
     setSuccess(null);
     
     try {
-      const result = await clearStore(storeName as any);
+      const result = await clearStore(storeName);
       
       if (result) {
         setSuccess(`Datos de ${storeName} borrados correctamente`);

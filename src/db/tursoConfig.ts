@@ -1,4 +1,4 @@
-import { createClient, Client } from '@libsql/client';
+import type { Client } from '@libsql/client';
 
 export interface TursoConfig {
   url: string;
@@ -7,10 +7,13 @@ export interface TursoConfig {
 
 let client: Client | null = null;
 
-export function initTursoClient(config: TursoConfig): Client {
+// Carga diferida del driver libSQL: solo se descarga si se usa Turso.
+export async function initTursoClient(config: TursoConfig): Promise<Client> {
   if (!config.url || !config.authToken) {
     throw new Error('Turso URL and auth token are required');
   }
+
+  const { createClient } = await import('@libsql/client');
 
   client = createClient({
     url: config.url,
@@ -76,7 +79,7 @@ CREATE TABLE IF NOT EXISTS savings_goals (
 CREATE TABLE IF NOT EXISTS investments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('fixed-deposit', 'savings-account', 'government-bond', 'mutual-fund', 'other')),
+  type TEXT NOT NULL,
   initial_amount REAL NOT NULL,
   current_amount REAL NOT NULL,
   annual_rate REAL NOT NULL,
@@ -85,9 +88,20 @@ CREATE TABLE IF NOT EXISTS investments (
   maturity_date TEXT NOT NULL,
   compounding_frequency TEXT NOT NULL CHECK (compounding_frequency IN ('daily', 'monthly', 'quarterly', 'semi-annual', 'annual')),
   is_active BOOLEAN NOT NULL DEFAULT 1,
+  monthly_contribution REAL,
   notes TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla de aportaciones de inversión
+CREATE TABLE IF NOT EXISTS investment_contributions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  investment_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  amount REAL NOT NULL,
+  note TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabla de configuración de Google Sheets
@@ -133,9 +147,81 @@ CREATE INDEX IF NOT EXISTS idx_investments_type ON investments(type);
 CREATE INDEX IF NOT EXISTS idx_investments_is_active ON investments(is_active);
 CREATE INDEX IF NOT EXISTS idx_investments_maturity_date ON investments(maturity_date);
 
+CREATE INDEX IF NOT EXISTS idx_contributions_investment_id ON investment_contributions(investment_id);
+CREATE INDEX IF NOT EXISTS idx_contributions_date ON investment_contributions(date);
+
 CREATE INDEX IF NOT EXISTS idx_google_sheets_last_sync ON google_sheets_config(last_sync);
 CREATE INDEX IF NOT EXISTS idx_google_sheets_token_expiry ON google_sheets_config(token_expiry);
 `;
+
+// Añade columnas nuevas a tablas que ya existían (ALTER TABLE es idempotente aquí
+// capturando el error "duplicate column name").
+async function runMigrations(client: Client): Promise<void> {
+  const migrations = [
+    `ALTER TABLE investments ADD COLUMN monthly_contribution REAL`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      await client.execute(sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/duplicate column name/i.test(message)) {
+        console.warn('Migración Turso omitida:', sql, message);
+      }
+    }
+  }
+
+  // El CHECK del enumerado de `type` antiguo no incluye las categorías nuevas.
+  // SQLite no permite quitar un CHECK con ALTER, así que recreamos la tabla
+  // conservando los datos cuando detectamos el esquema antiguo.
+  await migrateInvestmentsSchema(client);
+}
+
+async function migrateInvestmentsSchema(client: Client): Promise<void> {
+  const schema = await client.execute(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'investments'`
+  );
+  const createSql = String(schema.rows[0]?.sql ?? '');
+
+  // Si ya no hay CHECK restrictivo en `type`, no hay nada que migrar.
+  const hasLegacyCheck = createSql.includes("type IN (")
+    && !createSql.includes("'indexed-fund'");
+  if (!hasLegacyCheck) return;
+
+  console.log('Migrando esquema de investments (CHECK de type obsoleto)…');
+
+  const migrationStatements = [
+    `ALTER TABLE investments RENAME TO investments_legacy`,
+    `CREATE TABLE investments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      initial_amount REAL NOT NULL,
+      current_amount REAL NOT NULL,
+      annual_rate REAL NOT NULL,
+      start_date TEXT NOT NULL,
+      term_months INTEGER NOT NULL,
+      maturity_date TEXT NOT NULL,
+      compounding_frequency TEXT NOT NULL CHECK (compounding_frequency IN ('daily', 'monthly', 'quarterly', 'semi-annual', 'annual')),
+      is_active BOOLEAN NOT NULL DEFAULT 1,
+      monthly_contribution REAL,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `INSERT INTO investments (id, name, type, initial_amount, current_amount, annual_rate, start_date, term_months, maturity_date, compounding_frequency, is_active, monthly_contribution, notes, created_at, updated_at)
+     SELECT id, name, type, initial_amount, current_amount, annual_rate, start_date, term_months, maturity_date, compounding_frequency, is_active, monthly_contribution, notes, created_at, updated_at
+     FROM investments_legacy`,
+    `DROP TABLE investments_legacy`,
+  ];
+
+  for (const sql of migrationStatements) {
+    await client.execute(sql);
+  }
+
+  console.log('Esquema de investments migrado correctamente');
+}
 
 export async function initializeTursoDatabase(client: Client): Promise<void> {
   try {
@@ -148,8 +234,11 @@ export async function initializeTursoDatabase(client: Client): Promise<void> {
       }
     }
 
+    // Migraciones ligeras para tablas existentes (añadir columnas nuevas)
+    await runMigrations(client);
+
     // Inicializar metadatos de sincronización
-    const tables = ['expenses', 'balance', 'savings_goals', 'investments', 'google_sheets_config'];
+    const tables = ['expenses', 'balance', 'savings_goals', 'investments', 'investment_contributions', 'google_sheets_config'];
     
     for (const table of tables) {
       await client.execute({

@@ -37,46 +37,50 @@ import {
   Delete as DeleteIcon,
   TrendingUp as TrendingUpIcon,
   AccountBalance as AccountBalanceIcon,
-  Calculate as CalculateIcon
+  Calculate as CalculateIcon,
+  Insights as InsightsIcon
 } from '@mui/icons-material';
-import { Investment } from '../db/config';
+import { Investment, InvestmentContribution, InvestmentType } from '../db/config';
+import { INVESTMENT_CATEGORIES, getInvestmentCategory } from '../constants/investments';
+import { formatCurrency } from '../utils/formatters';
 import { calculateMaturityValue, calculateDaysToMaturity, calculateTotalReturn } from '../db/investmentServices';
 import {
   getInvestments as getAllInvestments,
+  getInvestmentContributions,
   addInvestment,
   updateInvestment,
   deleteInvestment,
 } from '../db';
+import InvestmentDetailDialog from './InvestmentDetailDialog';
 
 interface InvestmentFormData {
   name: string;
-  type: Investment['type'];
+  type: InvestmentType;
   initialAmount: number;
+  currentAmount: number;
   annualRate: number;
   startDate: Date;
   termMonths: number;
   compoundingFrequency: Investment['compoundingFrequency'];
+  monthlyContribution: number;
   notes: string;
 }
 
 const initialFormData: InvestmentFormData = {
   name: '',
-  type: 'fixed-deposit',
+  type: 'indexed-fund',
   initialAmount: 0,
-  annualRate: 0,
+  currentAmount: 0,
+  annualRate: 7,
   startDate: new Date(),
   termMonths: 12,
-  compoundingFrequency: 'monthly',
+  compoundingFrequency: 'annual',
+  monthlyContribution: 0,
   notes: ''
 };
 
-const investmentTypes = [
-  { value: 'fixed-deposit', label: 'Depósito a Plazo Fijo' },
-  { value: 'savings-account', label: 'Cuenta de Ahorros' },
-  { value: 'government-bond', label: 'Bono del Estado' },
-  { value: 'mutual-fund', label: 'Fondo Mutuo' },
-  { value: 'other', label: 'Otro' }
-];
+const availableCategories = INVESTMENT_CATEGORIES.filter(category => !category.comingSoon);
+const comingSoonCategories = INVESTMENT_CATEGORIES.filter(category => category.comingSoon);
 
 const compoundingFrequencies = [
   { value: 'daily', label: 'Diario' },
@@ -88,11 +92,13 @@ const compoundingFrequencies = [
 
 export default function Investments() {
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [contributions, setContributions] = useState<InvestmentContribution[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
   const [formData, setFormData] = useState<InvestmentFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailInvestment, setDetailInvestment] = useState<Investment | null>(null);
   const isMobile = useMediaQuery('(max-width:900px)');
   // const isTabletOrMobile = useMediaQuery('(max-width:1024px)');
   // En inversiones no necesitamos pestaña de vista anual, sólo la lista de inversiones
@@ -100,15 +106,19 @@ export default function Investments() {
   useEffect(() => {
     loadInvestments();
     const handler = () => loadInvestments();
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
   }, []);
 
   const loadInvestments = async () => {
     try {
       setLoading(true);
-      const updatedData = await getAllInvestments();
+      const [updatedData, updatedContributions] = await Promise.all([
+        getAllInvestments(),
+        getInvestmentContributions(),
+      ]);
       setInvestments(updatedData);
+      setContributions(updatedContributions);
     } catch (err) {
       setError('Error al cargar las inversiones');
       console.error(err);
@@ -124,10 +134,12 @@ export default function Investments() {
         name: investment.name,
         type: investment.type,
         initialAmount: investment.initialAmount,
+        currentAmount: investment.currentAmount,
         annualRate: investment.annualRate,
         startDate: investment.startDate,
         termMonths: investment.termMonths,
         compoundingFrequency: investment.compoundingFrequency,
+        monthlyContribution: investment.monthlyContribution || 0,
         notes: investment.notes || ''
       });
     } else {
@@ -162,13 +174,15 @@ export default function Investments() {
         name: formData.name,
         type: formData.type,
         initialAmount: formData.initialAmount,
-        currentAmount: formData.initialAmount,
+        // Al crear se parte del capital inicial; al editar se respeta el valor actual.
+        currentAmount: editingInvestment ? formData.currentAmount : formData.initialAmount,
         annualRate: formData.annualRate,
         startDate,
         termMonths: formData.termMonths,
         maturityDate,
         compoundingFrequency: formData.compoundingFrequency,
         isActive: true,
+        monthlyContribution: formData.monthlyContribution,
         notes: formData.notes
       };
 
@@ -200,16 +214,12 @@ export default function Investments() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
+  const handleOpenDetail = (investment: Investment) => {
+    setDetailInvestment(investment);
   };
 
-
-  const getTypeLabel = (type: Investment['type']) => {
-    return investmentTypes.find(t => t.value === type)?.label || type;
+  const getTypeLabel = (type: InvestmentType) => {
+    return getInvestmentCategory(type)?.label || type;
   };
 
   const getFrequencyLabel = (frequency: Investment['compoundingFrequency']) => {
@@ -217,7 +227,10 @@ export default function Investments() {
   };
 
   // Calcular totales
-  const totalInvested = investments.reduce((sum, inv) => sum + inv.initialAmount, 0);
+  // Capital aportado total = capital inicial + aportaciones registradas.
+  const totalInvested =
+    investments.reduce((sum, inv) => sum + inv.initialAmount, 0) +
+    contributions.reduce((sum, c) => sum + c.amount, 0);
   const totalCurrentValue = investments.reduce((sum, inv) => sum + inv.currentAmount, 0);
   const totalGains = totalCurrentValue - totalInvested;
   const totalReturnPercentage = totalInvested > 0 ? (totalGains / totalInvested) * 100 : 0;
@@ -247,7 +260,7 @@ export default function Investments() {
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                     <AccountBalanceIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">Total Invertido</Typography>
+                    <Typography variant="h6">Capital Aportado</Typography>
                   </Box>
                   <Typography variant="h4" color="primary">
                     {formatCurrency(totalInvested)}
@@ -341,11 +354,14 @@ export default function Investments() {
                         </Tooltip>
                       </Box>
                     </CardContent>
-                    <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
-                      <IconButton size="small" onClick={() => handleOpenDialog(investment)} color="primary">
+                    <CardActions sx={{ justifyContent: 'flex-end', pt: 0, pb: 2, px: 2 }}>
+                      <IconButton size="small" aria-label="Ver proyección" onClick={() => handleOpenDetail(investment)} color="info" sx={{ p: 1.25 }}>
+                        <InsightsIcon />
+                      </IconButton>
+                      <IconButton size="small" aria-label="Editar inversión" onClick={() => handleOpenDialog(investment)} color="primary" sx={{ p: 1.25 }}>
                         <EditIcon />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(investment.id!)} color="error">
+                      <IconButton size="small" aria-label="Eliminar inversión" onClick={() => handleDelete(investment.id!)} color="error" sx={{ p: 1.25 }}>
                         <DeleteIcon />
                       </IconButton>
                     </CardActions>
@@ -480,6 +496,15 @@ export default function Investments() {
                         <TableCell align="center">
                           <IconButton
                             size="small"
+                            aria-label="Ver proyección"
+                            onClick={() => handleOpenDetail(investment)}
+                            color="info"
+                          >
+                            <InsightsIcon />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            aria-label="Editar inversión"
                             onClick={() => handleOpenDialog(investment)}
                             color="primary"
                           >
@@ -487,6 +512,7 @@ export default function Investments() {
                           </IconButton>
                           <IconButton
                             size="small"
+                            aria-label="Eliminar inversión"
                             onClick={() => handleDelete(investment.id!)}
                             color="error"
                           >
@@ -562,11 +588,36 @@ export default function Investments() {
                 <Select
                   value={formData.type}
                   label="Tipo de Inversión"
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value as Investment['type'] })}
+                  onChange={(e) => {
+                    const nextType = e.target.value as InvestmentType;
+                    const category = getInvestmentCategory(nextType);
+                    setFormData((prev) => ({
+                      ...prev,
+                      type: nextType,
+                      annualRate: category ? category.defaultRate : prev.annualRate,
+                      compoundingFrequency: category ? category.defaultCompounding : prev.compoundingFrequency,
+                    }));
+                  }}
                 >
-                  {investmentTypes.map((type) => (
-                    <MenuItem key={type.value} value={type.value}>
-                      {type.label}
+                  <MenuItem value="" disabled>
+                    <em>Selecciona una categoría</em>
+                  </MenuItem>
+                  {availableCategories.map((category) => (
+                    <MenuItem key={category.value} value={category.value}>
+                      <Box>
+                        <Typography variant="body2">{category.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {category.description}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                  {comingSoonCategories.map((category) => (
+                    <MenuItem key={category.value} value={category.value} disabled>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" color="text.secondary">{category.label}</Typography>
+                        <Chip label="Próximamente" size="small" variant="outlined" />
+                      </Box>
                     </MenuItem>
                   ))}
                 </Select>
@@ -583,6 +634,19 @@ export default function Investments() {
                 inputProps={{ min: 0, step: 0.01 }}
               />
             </Grid>
+            {editingInvestment && (
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Valor Actual"
+                  type="number"
+                  value={formData.currentAmount}
+                  onChange={(e) => setFormData({ ...formData, currentAmount: parseFloat(e.target.value) || 0 })}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  helperText="Valor real actual de la inversión"
+                />
+              </Grid>
+            )}
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -616,6 +680,17 @@ export default function Investments() {
                 onChange={(e) => setFormData({ ...formData, termMonths: parseInt(e.target.value) || 12 })}
                 required
                 inputProps={{ min: 1 }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Aportación mensual (opcional)"
+                type="number"
+                value={formData.monthlyContribution}
+                onChange={(e) => setFormData({ ...formData, monthlyContribution: parseFloat(e.target.value) || 0 })}
+                inputProps={{ min: 0, step: 0.01 }}
+                helperText="Dinero que añades cada mes a esta inversión"
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -653,6 +728,14 @@ export default function Investments() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog de detalle: proyección (bola de nieve) y aportaciones */}
+      <InvestmentDetailDialog
+        open={detailInvestment !== null}
+        investment={detailInvestment}
+        onClose={() => setDetailInvestment(null)}
+        onChanged={loadInvestments}
+      />
     </Box>
   );
 }

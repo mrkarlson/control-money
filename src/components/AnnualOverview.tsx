@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Chip,
@@ -19,11 +19,12 @@ import {
   Grid,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { format, startOfYear, eachMonthOfInterval, endOfYear, isSameMonth } from 'date-fns';
+import { format, startOfYear, eachMonthOfInterval, endOfYear } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Expense } from '../db/config';
 // Usar adaptador de repositorio para respetar la BD activa
 import { getExpensesByMonth, getCurrentBalance } from '../db';
+import { calculateBalances } from '../utils/balances';
+import { formatCurrency } from '../utils/formatters';
 
 interface MonthlyExpenses {
   [key: string]: {
@@ -41,10 +42,10 @@ export default function AnnualOverview() {
   const [balance, setBalance] = useState<{ amount: number; monthlyIncome: number } | null>(null);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
 
-  const months = eachMonthOfInterval({
+  const months = useMemo(() => eachMonthOfInterval({
     start: startOfYear(currentYear),
     end: endOfYear(currentYear)
-  });
+  }), [currentYear]);
 
   const isMobile = useMediaQuery('(max-width:900px)');
 
@@ -53,13 +54,11 @@ export default function AnnualOverview() {
     try {
       const monthlyData: MonthlyExpenses = {};
       const allCategories = new Set<string>();
-      let allExpenses: Expense[] = [];
 
       // Obtener gastos para cada mes y calcular totales
       for (const month of months) {
         const monthKey = format(month, 'yyyy-MM');
         const monthExpenses = await getExpensesByMonth(month);
-        allExpenses = [...allExpenses, ...monthExpenses];
 
         // Extraer categorías y calcular totales
         monthlyData[monthKey] = {
@@ -74,7 +73,7 @@ export default function AnnualOverview() {
           allCategories.add(category);
 
           // Verificar si el gasto está pagado en este mes
-          const paymentRecord = expense.paymentHistory?.find((record: any) => 
+          const paymentRecord = expense.paymentHistory?.find(record => 
             format(new Date(record.date), 'yyyy-MM') === monthKey
           );
           const isPaid = paymentRecord?.isPaid || false;
@@ -104,7 +103,7 @@ export default function AnnualOverview() {
   useEffect(() => {
     // Inicializar todos los meses como seleccionados
     setSelectedMonths(months.map(month => format(month, 'yyyy-MM')));
-  }, [currentYear]);
+  }, [months]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -113,27 +112,23 @@ export default function AnnualOverview() {
       setBalance(currentBalance);
     };
     loadData();
-  }, [currentYear]);
+  }, [currentYear, loadExpenses]);
 
-  // Escuchar cambios de BD para recargar datos
+  // Escuchar cambios de BD/balance para recargar datos
   useEffect(() => {
-    const handler = async () => {
-      await loadExpenses();
-      const currentBalance = await getCurrentBalance();
-      setBalance(currentBalance);
+    const handler: EventListener = () => {
+      void loadExpenses();
+      void getCurrentBalance().then(setBalance);
     };
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler);
+    window.addEventListener('balanceUpdated', handler);
+    return () => {
+      window.removeEventListener('dbTypeChanged', handler);
+      window.removeEventListener('balanceUpdated', handler);
+    };
   }, [loadExpenses]);
 
   
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
 
   const handleMonthToggle = (monthKey: string) => {
     setSelectedMonths(prev =>
@@ -239,9 +234,10 @@ export default function AnnualOverview() {
                     <Typography variant="body2">Balance proyectado</Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(
                       selectedMonths.reduce((acc, monthKey) => {
-                        const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
-                        const projectedBalance = balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0;
-                        return acc + projectedBalance;
+                        const month = months.find(m => format(m, 'yyyy-MM') === monthKey);
+                        if (!month) return acc;
+                        const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
+                        return acc + calculateBalances(balance, monthExpenses.total, monthExpenses.totalPaid, month).projectedBalance;
                       }, 0)
                     )}</Typography>
                   </Box>
@@ -373,19 +369,10 @@ export default function AnnualOverview() {
                 {months.map(month => {
                   const monthKey = format(month, 'yyyy-MM');
                   const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
-                  let realBalance = 0;
-                  
-                  if (selectedMonths.includes(monthKey)) {
-                    if (monthExpenses.total === monthExpenses.totalPaid) {
-                      realBalance = 0;
-                    } else {
-                      const pendingExpenses = monthExpenses.total - monthExpenses.totalPaid;
-                      realBalance = balance?.amount ? 
-                        (isSameMonth(month, new Date()) ? balance.amount - pendingExpenses : balance.monthlyIncome - pendingExpenses) : 
-                        0;
-                    }
-                  }
-                  
+                  const realBalance = selectedMonths.includes(monthKey)
+                    ? calculateBalances(balance, monthExpenses.total, monthExpenses.totalPaid, month).realBalance
+                    : 0;
+
                   return (
                     <TableCell 
                       key={month.toString()} 
@@ -404,20 +391,9 @@ export default function AnnualOverview() {
                     selectedMonths.reduce((acc, monthKey) => {
                       const month = months.find(m => format(m, 'yyyy-MM') === monthKey);
                       if (!month) return acc;
-                      
+
                       const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
-                      let realBalance = 0;
-                      
-                      if (monthExpenses.total === monthExpenses.totalPaid) {
-                        realBalance = 0;
-                      } else {
-                        const pendingExpenses = monthExpenses.total - monthExpenses.totalPaid;
-                        realBalance = balance?.amount ? 
-                          (isSameMonth(month, new Date()) ? balance.amount - pendingExpenses : balance.monthlyIncome - pendingExpenses) : 
-                          0;
-                      }
-                      
-                      return acc + realBalance;
+                      return acc + calculateBalances(balance, monthExpenses.total, monthExpenses.totalPaid, month).realBalance;
                     }, 0)
                   )}
                 </TableCell>
@@ -426,9 +402,9 @@ export default function AnnualOverview() {
                 <TableCell>Balance Proyectado</TableCell>
                 {months.map(month => {
                   const monthKey = format(month, 'yyyy-MM');
-                  const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
+                  const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
                   const projectedBalance = selectedMonths.includes(monthKey)
-                    ? (balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0)
+                    ? calculateBalances(balance, monthExpenses.total, monthExpenses.totalPaid, month).projectedBalance
                     : 0;
                   return (
                     <TableCell 
@@ -446,9 +422,11 @@ export default function AnnualOverview() {
                 <TableCell align="right">
                   {formatCurrency(
                     selectedMonths.reduce((acc, monthKey) => {
-                      const monthExpenses = monthlyExpenses[monthKey] || { total: 0 };
-                      const projectedBalance = balance?.monthlyIncome ? balance.monthlyIncome - monthExpenses.total : 0;
-                      return acc + projectedBalance;
+                      const month = months.find(m => format(m, 'yyyy-MM') === monthKey);
+                      if (!month) return acc;
+
+                      const monthExpenses = monthlyExpenses[monthKey] || { total: 0, totalPaid: 0 };
+                      return acc + calculateBalances(balance, monthExpenses.total, monthExpenses.totalPaid, month).projectedBalance;
                     }, 0)
                   )}
                 </TableCell>

@@ -30,11 +30,12 @@ export class DatabaseSyncServiceImpl implements DatabaseSyncService {
         case 'remote-to-local':
           result.recordsTransferred = await this.syncFromSourceToTarget(target, source);
           break;
-        case 'merge':
+        case 'merge': {
           const mergeResult = await this.mergeRepositories(source, target, sourceMetadata, targetMetadata);
           result.recordsTransferred = mergeResult.recordsTransferred;
           result.conflicts = mergeResult.conflicts;
           break;
+        }
         case 'conflict':
           result.error = 'Conflictos detectados que requieren resolución manual';
           result.conflicts = await this.detectConflicts(source, target);
@@ -89,9 +90,8 @@ export class DatabaseSyncServiceImpl implements DatabaseSyncService {
       
       // Contar registros y generar checksum
       Object.entries(data).forEach(([table, records]) => {
-        const recordsArray = records as any[];
-        totalRecords += recordsArray.length;
-        checksumData += `${table}:${recordsArray.length}:${JSON.stringify(recordsArray.slice(0, 5))}`;
+        totalRecords += records.length;
+        checksumData += `${table}:${records.length}:${JSON.stringify(records.slice(0, 5))}`;
       });
 
       const checksum = await this.generateChecksum(checksumData);
@@ -151,8 +151,7 @@ export class DatabaseSyncServiceImpl implements DatabaseSyncService {
     
     let totalRecords = 0;
     Object.values(data).forEach(records => {
-      const recordsArray = records as any[];
-      totalRecords += recordsArray.length;
+      totalRecords += records.length;
     });
     
     return totalRecords;

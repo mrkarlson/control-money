@@ -40,6 +40,13 @@ export {
   updateInvestment,
   deleteInvestment,
   getInvestmentById,
+
+  // Servicios de aportaciones de inversión
+  addInvestmentContribution,
+  updateInvestmentContribution,
+  deleteInvestmentContribution,
+  getInvestmentContributions,
+  getContributionsByInvestment,
   
   // Servicios de configuración de Google Sheets
   saveGoogleSheetsConfig,

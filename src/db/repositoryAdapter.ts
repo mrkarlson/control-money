@@ -1,7 +1,7 @@
 import { DatabaseRepository } from './repositories/interfaces';
 import type { DatabaseType } from './repositories/interfaces';
 import { createRepositoryFromEnv } from './repositories/repositoryFactory';
-import { Expense, Balance, SavingsGoal, Investment, GoogleSheetsConfig } from './config';
+import { Expense, Balance, SavingsGoal, Investment, InvestmentContribution, GoogleSheetsConfig } from './config';
 
 // Singleton para el repositorio actual
 let currentRepository: DatabaseRepository | null = null;
@@ -159,6 +159,32 @@ export async function getInvestmentById(id: number): Promise<Investment | undefi
   return repo.investments.findById(id);
 }
 
+// Servicios de aportaciones de inversión
+export async function addInvestmentContribution(contribution: Omit<InvestmentContribution, 'id'>): Promise<InvestmentContribution> {
+  const repo = await getCurrentRepository();
+  return repo.investmentContributions.create(contribution);
+}
+
+export async function updateInvestmentContribution(contribution: InvestmentContribution): Promise<InvestmentContribution> {
+  const repo = await getCurrentRepository();
+  return repo.investmentContributions.update(contribution);
+}
+
+export async function deleteInvestmentContribution(id: number): Promise<boolean> {
+  const repo = await getCurrentRepository();
+  return repo.investmentContributions.delete(id);
+}
+
+export async function getInvestmentContributions(): Promise<InvestmentContribution[]> {
+  const repo = await getCurrentRepository();
+  return repo.investmentContributions.findAll();
+}
+
+export async function getContributionsByInvestment(investmentId: number): Promise<InvestmentContribution[]> {
+  const repo = await getCurrentRepository();
+  return repo.investmentContributions.findByInvestment(investmentId);
+}
+
 // Servicios de configuración de Google Sheets
 export async function saveGoogleSheetsConfig(config: Omit<GoogleSheetsConfig, 'id'>): Promise<GoogleSheetsConfig> {
   const repo = await getCurrentRepository();
@@ -181,12 +207,12 @@ export async function deleteGoogleSheetsConfig(id: number): Promise<void> {
 }
 
 // Servicios de base de datos
-export async function exportDatabase(): Promise<any> {
+export async function exportDatabase(): Promise<Record<string, unknown[]>> {
   const repo = await getCurrentRepository();
   return repo.operations.exportData();
 }
 
-export async function importDatabase(data: any): Promise<void> {
+export async function importDatabase(data: Record<string, unknown[]>): Promise<void> {
   const repo = await getCurrentRepository();
   await repo.operations.importData(data);
 }
@@ -202,12 +228,12 @@ export async function clearStore(storeName: string): Promise<boolean> {
   }
 }
 
-export async function backupDatabase(): Promise<any> {
+export async function backupDatabase(): Promise<string> {
   const repo = await getCurrentRepository();
   return repo.operations.backup();
 }
 
-export async function restoreDatabase(data: any): Promise<void> {
+export async function restoreDatabase(data: string): Promise<void> {
   const repo = await getCurrentRepository();
   await repo.operations.restore(data);
 }

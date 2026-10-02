@@ -279,7 +279,7 @@ async function importDataFromSheet(config: GoogleSheetsConfig): Promise<SyncData
               monthlyData.push(currentMonthData);
             }
           }
-        } catch (e) {
+        } catch {
           console.warn('No se pudo parsear la fecha:', row[0]);
         }
       }

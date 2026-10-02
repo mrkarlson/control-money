@@ -7,11 +7,14 @@ import {
   Typography,
   Alert,
   CircularProgress,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import { validateGoogleSheetsConfig } from '../db/googleSheetsService';
 import { getGoogleSheetsConfig, saveGoogleSheetsConfig } from '../db';
 import DatabaseBackup from './DatabaseBackup';
 import GoogleSheetsSync from './GoogleSheetsSync';
+import { getBalancePromptSnoozeUntil, resetBalancePrompt, snoozeBalancePrompt } from '../utils/paymentPreference';
 
 interface GoogleSheetsConfig {
   clientId: string;
@@ -43,14 +46,14 @@ export default function GoogleSheetsConfig() {
   useEffect(() => {
     loadConfig();
     const handler = () => loadConfig();
-    window.addEventListener('dbTypeChanged', handler as any);
-    return () => window.removeEventListener('dbTypeChanged', handler as any);
+    window.addEventListener('dbTypeChanged', handler);
+    return () => window.removeEventListener('dbTypeChanged', handler);
   }, []);
 
   const loadConfig = async () => {
     try {
       const configs = await getGoogleSheetsConfig();
-      const savedConfig = Array.isArray(configs) ? (configs[0] as any) : undefined;
+      const savedConfig = Array.isArray(configs) ? configs[0] : undefined;
       if (savedConfig) {
         setConfig(savedConfig);
       }
@@ -82,7 +85,7 @@ export default function GoogleSheetsConfig() {
       await saveGoogleSheetsConfig({
         ...config,
         lastSync: null,
-      } as any);
+      });
       setSuccess('Configuración guardada correctamente');
     } catch (error) {
       console.error('Error saving Google Sheets config:', error);
@@ -244,8 +247,54 @@ export default function GoogleSheetsConfig() {
         }
       </Paper>
 
+      <Paper className="p-8">
+        <Typography variant="h6" className="font-semibold mb-4">
+          Preferencias
+        </Typography>
+        <hr className="mt-2 mb-4" />
+        <PaymentPromptSettings />
+      </Paper>
+
       <GoogleSheetsSync />
       <DatabaseBackup />
+    </Box>
+  );
+}
+
+export function PaymentPromptSettings() {
+  const [snoozeUntil, setSnoozeUntil] = useState<Date | null>(() => getBalancePromptSnoozeUntil());
+  const [askAgain, setAskAgain] = useState(() => {
+    const until = getBalancePromptSnoozeUntil();
+    return !until || until.getTime() <= Date.now();
+  });
+
+  const handleToggle = (value: boolean) => {
+    setAskAgain(value);
+    if (value) {
+      resetBalancePrompt();
+      setSnoozeUntil(null);
+    } else {
+      snoozeBalancePrompt();
+      setSnoozeUntil(getBalancePromptSnoozeUntil());
+    }
+  };
+
+  return (
+    <Box>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={askAgain}
+            onChange={(e) => handleToggle(e.target.checked)}
+          />
+        }
+        label="Preguntar si descuento del balance al marcar un gasto como pagado"
+      />
+      {!askAgain && snoozeUntil && (
+        <Typography variant="caption" display="block" color="text.secondary">
+          Silenciado hasta el {snoozeUntil.toLocaleDateString('es-ES')}
+        </Typography>
+      )}
     </Box>
   );
 }

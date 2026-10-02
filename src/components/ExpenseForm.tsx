@@ -58,7 +58,7 @@ export default function ExpenseForm({ open, onClose, onExpenseAdded, expense: ex
 
   useEffect(() => {
     if (expenseProp) {
-      const { id, ...expenseData } = expenseProp;
+      const { id: _id, ...expenseData } = expenseProp;
       setExpense({
         ...expenseData,
         date: new Date(expenseData.date),

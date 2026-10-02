@@ -1,4 +1,4 @@
-import { Expense, Balance, SavingsGoal, Investment, GoogleSheetsConfig } from '../config';
+import { Expense, Balance, SavingsGoal, Investment, InvestmentContribution, GoogleSheetsConfig } from '../config';
 
 // Interfaz base para operaciones CRUD
 export interface BaseRepository<T, K = number> {
@@ -36,6 +36,14 @@ export interface InvestmentRepository extends BaseRepository<Investment> {
   updateAllCurrentValues(): Promise<void>;
 }
 
+export interface InvestmentContributionRepository {
+  create(entity: Omit<InvestmentContribution, 'id'>): Promise<InvestmentContribution>;
+  update(entity: InvestmentContribution): Promise<InvestmentContribution>;
+  delete(id: number): Promise<boolean>;
+  findAll(): Promise<InvestmentContribution[]>;
+  findByInvestment(investmentId: number): Promise<InvestmentContribution[]>;
+}
+
 export interface GoogleSheetsRepository extends BaseRepository<GoogleSheetsConfig> {
   findByLastSync(): Promise<GoogleSheetsConfig[]>;
   updateTokens(id: number, accessToken: string, refreshToken: string, expiry: Date): Promise<GoogleSheetsConfig>;
@@ -43,8 +51,8 @@ export interface GoogleSheetsRepository extends BaseRepository<GoogleSheetsConfi
 
 // Interfaz para operaciones de base de datos
 export interface DatabaseOperations {
-  exportData(): Promise<Record<string, any[]>>;
-  importData(data: Record<string, any[]>): Promise<void>;
+  exportData(): Promise<Record<string, unknown[]>>;
+  importData(data: Record<string, unknown[]>): Promise<void>;
   clearAll(): Promise<void>;
   backup(): Promise<string>;
   restore(backupData: string): Promise<void>;
@@ -56,12 +64,13 @@ export interface DatabaseRepository {
   balance: BalanceRepository;
   savings: SavingsRepository;
   investments: InvestmentRepository;
+  investmentContributions: InvestmentContributionRepository;
   googleSheets: GoogleSheetsRepository;
   operations: DatabaseOperations;
   
   // Métodos de operaciones de base de datos
-  exportData(): Promise<Record<string, any[]>>;
-  importData(data: Record<string, any[]>): Promise<void>;
+  exportData(): Promise<Record<string, unknown[]>>;
+  importData(data: Record<string, unknown[]>): Promise<void>;
   clearAll(): Promise<void>;
   backup(): Promise<string>;
   restore(backupData: string): Promise<void>;
@@ -108,8 +117,8 @@ export interface SyncResult {
 export interface SyncConflict {
   table: string;
   recordId: number;
-  localData: any;
-  remoteData: any;
+  localData: unknown;
+  remoteData: unknown;
   resolution?: 'local' | 'remote' | 'merge';
 }
 

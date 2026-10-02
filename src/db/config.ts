@@ -40,10 +40,22 @@ export interface SavingsGoal {
   completed: boolean;
 }
 
+export type InvestmentType =
+  | 'indexed-fund'
+  | 'etf'
+  | 'managed-fund'
+  | 'stock'
+  | 'crypto'
+  | 'fixed-deposit'
+  | 'savings-account'
+  | 'government-bond'
+  | 'mutual-fund'
+  | 'other';
+
 export interface Investment {
   id?: number;
   name: string;
-  type: 'fixed-deposit' | 'savings-account' | 'government-bond' | 'mutual-fund' | 'other';
+  type: InvestmentType;
   initialAmount: number;
   currentAmount: number;
   annualRate: number; // Tasa anual en porcentaje
@@ -52,11 +64,21 @@ export interface Investment {
   maturityDate: Date;
   compoundingFrequency: 'daily' | 'monthly' | 'quarterly' | 'semi-annual' | 'annual';
   isActive: boolean;
+  monthlyContribution?: number; // Aportación periódica planificada
   notes?: string;
 }
 
+// Registro de aportaciones realizadas a una inversión
+export interface InvestmentContribution {
+  id?: number;
+  investmentId: number;
+  date: Date;
+  amount: number;
+  note?: string;
+}
+
 const DB_NAME = 'expense-tracker';
-const DB_VERSION = 77; // Incrementamos la versión para corregir problemas de inicialización
+const DB_VERSION = 78; // +1: store de aportaciones de inversión (investmentContributions)
 
 export interface GoogleSheetsConfig {
   id?: number;
@@ -105,6 +127,11 @@ export type ExpenseDB = {
     key: number;
     value: Investment;
     indexes: { 'startDate': Date; 'type': string; 'isActive': boolean; 'maturityDate': Date };
+  };
+  investmentContributions: {
+    key: number;
+    value: InvestmentContribution;
+    indexes: { 'investmentId': number; 'date': Date };
   };
   dbConfig: {
     key: number;
@@ -158,6 +185,15 @@ function setupInvestmentsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
     investmentsStore.createIndex('type', 'type');
     investmentsStore.createIndex('isActive', 'isActive');
     investmentsStore.createIndex('maturityDate', 'maturityDate');
+  }
+}
+
+// Store para aportaciones de inversión
+function setupInvestmentContributionsStore(db: IDBPDatabase<ExpenseDB> | IDBDatabase) {
+  if (!db.objectStoreNames.contains('investmentContributions')) {
+    const contributionsStore = db.createObjectStore('investmentContributions', { keyPath: 'id', autoIncrement: true });
+    contributionsStore.createIndex('investmentId', 'investmentId');
+    contributionsStore.createIndex('date', 'date');
   }
 }
 
@@ -224,7 +260,7 @@ export async function deleteDatabase(): Promise<boolean> {
     
     request.onerror = (event) => {
       console.error(`Error al eliminar la base de datos ${DB_NAME}:`, event);
-      reject(new Error(`No se pudo eliminar la base de datos: ${(event.target as any).error}`));
+      reject(new Error(`No se pudo eliminar la base de datos: ${(event.target as IDBRequest<unknown>).error}`));
     };
     
     request.onblocked = (_event) => {
@@ -249,6 +285,7 @@ export async function initDB() {
         setupSheetConfigStore(db);
         setupSavingsStore(db);
         setupInvestmentsStore(db);
+        setupInvestmentContributionsStore(db);
         setupDbConfigStore(db);
       },
     });
@@ -257,12 +294,14 @@ export async function initDB() {
     const storeNames = Array.from(db.objectStoreNames);
     console.log(`Stores creados: ${storeNames.join(', ')}`);
     
-    if (!storeNames.includes('expenses') || !storeNames.includes('balance') || !storeNames.includes('sheetConfig') || !storeNames.includes('savings') || !storeNames.includes('investments') || !storeNames.includes('dbConfig')) {
+    if (!storeNames.includes('expenses') || !storeNames.includes('balance') || !storeNames.includes('sheetConfig') || !storeNames.includes('savings') || !storeNames.includes('investments') || !storeNames.includes('investmentContributions') || !storeNames.includes('dbConfig')) {
       console.warn('Stores faltantes detectados, intentando reiniciar la base de datos...', storeNames);
       // Intento de recuperación: cerrar, eliminar y recrear la BD
       try {
         db.close();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       await deleteDatabase();
       await new Promise(resolve => setTimeout(resolve, 300));
       const recreated = await openDB<ExpenseDB>(DB_NAME, DB_VERSION, {
@@ -273,12 +312,13 @@ export async function initDB() {
           setupSheetConfigStore(db2);
           setupSavingsStore(db2);
           setupInvestmentsStore(db2);
+          setupInvestmentContributionsStore(db2);
           setupDbConfigStore(db2);
         },
       });
       const recreatedStores = Array.from(recreated.objectStoreNames);
       console.log('Stores después de recreación:', recreatedStores);
-      if (!recreatedStores.includes('expenses') || !recreatedStores.includes('balance') || !recreatedStores.includes('sheetConfig') || !recreatedStores.includes('savings') || !recreatedStores.includes('investments') || !recreatedStores.includes('dbConfig')) {
+      if (!recreatedStores.includes('expenses') || !recreatedStores.includes('balance') || !recreatedStores.includes('sheetConfig') || !recreatedStores.includes('savings') || !recreatedStores.includes('investments') || !recreatedStores.includes('investmentContributions') || !recreatedStores.includes('dbConfig')) {
         console.error('No se pudieron crear todos los stores necesarios tras la recreación. Stores existentes:', recreatedStores);
         throw new Error('Faltan stores en la base de datos tras recreación');
       }

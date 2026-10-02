@@ -143,20 +143,23 @@ function App() {
                   <div className="space-y-2">
                     <button
                       onClick={() => navigateTo('expenses')}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${isCurrentPath('expenses') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                      className={`w-full flex items-center px-4 py-2 rounded-lg transition-colors ${isCurrentPath('expenses') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
+                      <TableChartIcon className="w-5 h-5 mr-3" />
                       Gastos
                     </button>
                     <button
                       onClick={() => navigateTo('investments')}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${isCurrentPath('investments') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                      className={`w-full flex items-center px-4 py-2 rounded-lg transition-colors ${isCurrentPath('investments') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
+                      <ShowChartIcon className="w-5 h-5 mr-3" />
                       Inversiones
                     </button>
                     <button
                       onClick={() => navigateTo('savings')}
-                      className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${isCurrentPath('savings') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                      className={`w-full flex items-center px-4 py-2 rounded-lg transition-colors ${isCurrentPath('savings') ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
+                      <SavingsIcon className="w-5 h-5 mr-3" />
                       Ahorros
                     </button>
                   </div>

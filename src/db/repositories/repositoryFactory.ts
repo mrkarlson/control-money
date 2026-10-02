@@ -12,14 +12,15 @@ export class DatabaseRepositoryFactory implements RepositoryFactory {
         await initDB();
         return new IndexedDbRepository();
       
-      case 'turso':
+      case 'turso': {
         if (!config.turso) {
           throw new Error('Turso configuration is required for turso database type');
         }
-        
-        const client = initTursoClient(config.turso);
+
+        const client = await initTursoClient(config.turso);
         await initializeTursoDatabase(client);
         return new TursoRepository(client);
+      }
       
       default:
         throw new Error(`Unsupported database type: ${config.type}`);
@@ -44,7 +45,9 @@ export async function createRepositoryFromEnv(): Promise<DatabaseRepository> {
   if (typeof window !== 'undefined') {
     try {
       preferred = localStorage.getItem('preferred_db_type');
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   const envType = (import.meta.env.VITE_DB_TYPE || 'local') as 'local' | 'turso';
@@ -88,7 +91,7 @@ export async function createRepositoryFromEnv(): Promise<DatabaseRepository> {
     const repo = await factory.create(config);
     // Persistir el tipo de BD realmente activo
     if (typeof window !== 'undefined') {
-      try { localStorage.setItem('active_db_type', config.type); } catch {}
+      try { localStorage.setItem('active_db_type', config.type); } catch { /* ignore */ }
     }
     return repo;
   } catch (err) {
@@ -98,7 +101,7 @@ export async function createRepositoryFromEnv(): Promise<DatabaseRepository> {
       const localConfig: DatabaseConfig = { type: 'local' };
       const localRepo = await factory.create(localConfig);
       if (typeof window !== 'undefined') {
-        try { localStorage.setItem('active_db_type', 'local'); } catch {}
+        try { localStorage.setItem('active_db_type', 'local'); } catch { /* ignore */ }
       }
       return localRepo;
     } catch (localErr) {
